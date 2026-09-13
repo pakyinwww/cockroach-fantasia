@@ -4,6 +4,8 @@
   "references": [
     "CockroachFantasia.Runtime",
     "Unity.Netcode.Runtime",
+    "Unity.InputSystem",
+    "Unity.ugui",
     "Unity.RenderPipelines.Universal.Runtime"
   ],
   "includePlatforms": [

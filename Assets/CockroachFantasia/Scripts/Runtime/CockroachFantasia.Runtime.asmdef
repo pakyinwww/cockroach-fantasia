@@ -8,6 +8,7 @@
     "Unity.Services.Multiplayer",
     "Unity.Netcode.Runtime",
     "Unity.Networking.Transport",
+    "Unity.Collections",
     "Unity.ugui"
   ],
   "autoReferenced": true

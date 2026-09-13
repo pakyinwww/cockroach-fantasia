@@ -8,6 +8,8 @@ namespace CockroachFantasia.Networking
     public sealed class NetworkRuntimeBootstrap : MonoBehaviour
     {
         private const string PrefabListResource = "Networking/CockroachNetworkPrefabs";
+        private const string DiagnosticAvatarResource = "Networking/DiagnosticAvatar";
+        private const string RosterResource = "Networking/NetworkRoster";
         private static NetworkRuntimeBootstrap instance;
 
         public static NetworkRuntimeBootstrap Instance => instance;
@@ -52,15 +54,40 @@ namespace CockroachFantasia.Networking
             }
 
             Manager.NetworkConfig.Prefabs.NetworkPrefabsLists.Add(prefabs);
-            Manager.NetworkConfig.PlayerPrefab = prefabs.PrefabList[0].Prefab;
+            Manager.NetworkConfig.PlayerPrefab = Resources.Load<GameObject>(DiagnosticAvatarResource);
+            Manager.OnServerStarted += SpawnServerSystems;
         }
 
         private void OnDestroy()
         {
+            if (Manager != null)
+            {
+                Manager.OnServerStarted -= SpawnServerSystems;
+            }
+
             if (instance == this)
             {
                 instance = null;
             }
+        }
+
+        private void SpawnServerSystems()
+        {
+            if (!Manager.IsServer || NetworkRoster.Instance != null)
+            {
+                return;
+            }
+
+            var rosterPrefab = Resources.Load<GameObject>(RosterResource);
+            if (rosterPrefab == null)
+            {
+                Debug.LogError($"Network roster prefab is missing at Resources/{RosterResource}.");
+                return;
+            }
+
+            var rosterObject = Instantiate(rosterPrefab);
+            DontDestroyOnLoad(rosterObject);
+            rosterObject.GetComponent<NetworkObject>().Spawn();
         }
     }
 }
