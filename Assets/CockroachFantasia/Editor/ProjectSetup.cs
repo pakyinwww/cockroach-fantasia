@@ -154,10 +154,20 @@ namespace CockroachFantasia.Editor
             {
                 var definition = Scenes[index];
                 var path = $"{ScenesRoot}/{definition.Name}.unity";
-                var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                var scene = File.Exists(path)
+                    ? EditorSceneManager.OpenScene(path, OpenSceneMode.Single)
+                    : EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-                var root = new GameObject($"{definition.Name}Root");
-                root.AddComponent<FoundationMarker>().Configure(definition.Purpose);
+                var rootName = $"{definition.Name}Root";
+                var root = GameObject.Find(rootName) ?? new GameObject(rootName);
+                var marker = root.GetComponent<FoundationMarker>() ?? root.AddComponent<FoundationMarker>();
+                marker.Configure(definition.Purpose);
+
+                if (definition.Name == "Bootstrap" && root.GetComponent<ServicesBootstrap>() == null)
+                {
+                    root.AddComponent<ServicesBootstrap>();
+                }
+
                 CreateCameraAndLight(scene);
 
                 EditorSceneManager.SaveScene(scene, path);
@@ -170,6 +180,11 @@ namespace CockroachFantasia.Editor
 
         private static void CreateCameraAndLight(Scene scene)
         {
+            if (UnityEngine.Object.FindFirstObjectByType<Camera>() != null)
+            {
+                return;
+            }
+
             var cameraObject = new GameObject("Main Camera");
             SceneManager.MoveGameObjectToScene(cameraObject, scene);
             cameraObject.tag = "MainCamera";

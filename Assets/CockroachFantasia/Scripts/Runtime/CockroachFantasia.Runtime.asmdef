@@ -2,7 +2,10 @@
   "name": "CockroachFantasia.Runtime",
   "rootNamespace": "CockroachFantasia",
   "references": [
-    "Unity.InputSystem"
+    "Unity.InputSystem",
+    "Unity.Services.Core",
+    "Unity.Services.Authentication",
+    "Unity.ugui"
   ],
   "autoReferenced": true
 }

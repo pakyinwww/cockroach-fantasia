@@ -221,6 +221,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1381066981}
   - component: {fileID: 1381066980}
+  - component: {fileID: 1381066982}
   m_Layer: 0
   m_Name: BootstrapRoot
   m_TagString: Untagged
@@ -256,6 +257,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1381066982
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1381066979}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b5bfdb292768fa4cbd2da5f48f84325, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.App.ServicesBootstrap
+  timeoutSeconds: 15
+  initializeOnStart: 1
 --- !u!1 &1907185255
 GameObject:
   m_ObjectHideFlags: 0
