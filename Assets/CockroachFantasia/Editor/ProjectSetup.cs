@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using CockroachFantasia.App;
+using CockroachFantasia.Networking;
+using Unity.Netcode;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
@@ -16,6 +18,8 @@ namespace CockroachFantasia.Editor
         private const string Root = "Assets/CockroachFantasia";
         private const string SettingsRoot = Root + "/Settings";
         private const string ScenesRoot = Root + "/Scenes";
+        private const string DiagnosticAvatarPath = Root + "/Resources/Networking/DiagnosticAvatar.prefab";
+        private const string NetworkPrefabsPath = Root + "/Resources/Networking/CockroachNetworkPrefabs.asset";
 
         private static readonly (string Name, string Purpose)[] Scenes =
         {
@@ -31,6 +35,7 @@ namespace CockroachFantasia.Editor
             CreateFolders();
             ConfigurePlayer();
             ConfigureRenderPipeline();
+            CreateNetworkingAssets();
             CreateScenes();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -82,6 +87,7 @@ namespace CockroachFantasia.Editor
                 "Audio/Music", "Audio/SFX", "Data/MatchRules", "Data/FoodDefinitions",
                 "Input", "Prefabs/Characters", "Prefabs/Food", "Prefabs/Networking",
                 "Prefabs/Props", "Prefabs/UI", "Scenes", "Settings",
+                "Resources/Networking",
                 "Scripts/Runtime/App", "Scripts/Runtime/Camera", "Scripts/Runtime/Characters",
                 "Scripts/Runtime/Food", "Scripts/Runtime/Gameplay", "Scripts/Runtime/Networking",
                 "Scripts/Runtime/UI", "Scripts/Tests/EditMode", "Scripts/Tests/PlayMode"
@@ -176,6 +182,34 @@ namespace CockroachFantasia.Editor
 
             EditorBuildSettings.scenes = buildScenes;
             EditorSceneManager.OpenScene(buildScenes[0].path, OpenSceneMode.Single);
+        }
+
+        private static void CreateNetworkingAssets()
+        {
+            var avatarPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DiagnosticAvatarPath);
+            if (avatarPrefab == null)
+            {
+                var avatar = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                avatar.name = "DiagnosticAvatar";
+                avatar.transform.localScale = new Vector3(0.65f, 0.65f, 0.65f);
+                avatar.AddComponent<NetworkObject>();
+                avatar.AddComponent<DiagnosticAvatar>();
+                avatarPrefab = PrefabUtility.SaveAsPrefabAsset(avatar, DiagnosticAvatarPath);
+                UnityEngine.Object.DestroyImmediate(avatar);
+            }
+
+            var prefabList = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>(NetworkPrefabsPath);
+            if (prefabList == null)
+            {
+                prefabList = ScriptableObject.CreateInstance<NetworkPrefabsList>();
+                AssetDatabase.CreateAsset(prefabList, NetworkPrefabsPath);
+            }
+
+            if (!prefabList.Contains(avatarPrefab))
+            {
+                prefabList.Add(new NetworkPrefab { Prefab = avatarPrefab });
+                EditorUtility.SetDirty(prefabList);
+            }
         }
 
         private static void CreateCameraAndLight(Scene scene)
