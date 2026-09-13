@@ -1,0 +1,51 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# IDE files
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity generated files
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+sysinfo.txt
+
+# Builds and crash reports
+*.apk
+*.aab
+*.app
+*.unitypackage
+crashlytics-build.properties
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local service and secret configuration
+.env
+.env.*
+!.env.example
+Assets/StreamingAssets/UnityServicesSettings.json

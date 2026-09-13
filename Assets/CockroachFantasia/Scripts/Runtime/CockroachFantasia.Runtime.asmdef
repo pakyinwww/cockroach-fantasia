@@ -1,0 +1,8 @@
+{
+  "name": "CockroachFantasia.Runtime",
+  "rootNamespace": "CockroachFantasia",
+  "references": [
+    "Unity.InputSystem"
+  ],
+  "autoReferenced": true
+}
