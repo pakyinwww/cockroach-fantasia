@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CockroachFantasia.App;
 using Unity.Services.Multiplayer;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace CockroachFantasia.Networking
 {
@@ -17,11 +18,14 @@ namespace CockroachFantasia.Networking
         private static SessionCoordinator instance;
         private CancellationTokenSource lifetimeCancellation;
         private ISession currentSession;
+        private bool voluntaryLeave;
+        private bool handlingTerminalDisconnect;
 
         public static SessionCoordinator Instance => instance;
         public SessionConnectionState State { get; private set; } = SessionConnectionState.Idle;
         public string RoomCode => currentSession?.Code ?? string.Empty;
         public string StatusMessage { get; private set; } = "Not connected.";
+        public SessionFailureKind LastFailureKind { get; private set; } = SessionFailureKind.None;
         public int PlayerCount => currentSession?.PlayerCount ?? 0;
         public ISession CurrentSession => currentSession;
 
@@ -52,7 +56,7 @@ namespace CockroachFantasia.Networking
             DontDestroyOnLoad(gameObject);
         }
 
-        private async void OnDestroy()
+        private void OnDestroy()
         {
             if (instance != this)
             {
@@ -60,18 +64,7 @@ namespace CockroachFantasia.Networking
             }
 
             lifetimeCancellation.Cancel();
-            if (currentSession != null)
-            {
-                try
-                {
-                    await currentSession.LeaveAsync();
-                }
-                catch (Exception exception)
-                {
-                    Debug.LogWarning($"Could not leave Session during shutdown: {exception.Message}");
-                }
-            }
-
+            DetachSession();
             lifetimeCancellation.Dispose();
             instance = null;
         }
@@ -103,7 +96,7 @@ namespace CockroachFantasia.Networking
             }
             catch (Exception exception)
             {
-                HandleConnectionFailure("Could not create the room.", exception);
+                HandleConnectionFailure(exception);
                 return false;
             }
         }
@@ -116,9 +109,9 @@ namespace CockroachFantasia.Networking
             }
 
             var normalized = NormalizeRoomCode(roomCode);
-            if (normalized.Length == 0)
+            if (!IsValidRoomCode(normalized))
             {
-                SetState(SessionConnectionState.Failed, "Enter a room code.");
+                SetFailure(SessionFailureKind.InvalidCode);
                 return false;
             }
 
@@ -134,7 +127,7 @@ namespace CockroachFantasia.Networking
             }
             catch (Exception exception)
             {
-                HandleConnectionFailure("Could not join that room. Check the code and retry.", exception);
+                HandleConnectionFailure(exception);
                 return false;
             }
         }
@@ -149,17 +142,49 @@ namespace CockroachFantasia.Networking
 
             SetState(SessionConnectionState.Leaving, "Leaving room…");
             var leaving = currentSession;
-            DetachSession();
+            voluntaryLeave = true;
 
             try
             {
                 await leaving.LeaveAsync();
+                DetachSession();
+                EnsureNetworkStopped();
                 SetState(SessionConnectionState.Idle, "Left the room.");
+                LoadFrontEndIfNeeded();
             }
             catch (Exception exception)
             {
                 Debug.LogWarning($"Session leave failed: {exception.Message}");
-                SetState(SessionConnectionState.Failed, "The room closed, but cleanup did not finish cleanly.");
+                DetachSession();
+                EnsureNetworkStopped();
+                SetFailure(SessionFailureKind.Disconnected, "The room closed, but cleanup did not finish cleanly.");
+                LoadFrontEndIfNeeded();
+            }
+            finally
+            {
+                voluntaryLeave = false;
+            }
+        }
+
+        public async Task<bool> SetSessionLockedAsync(bool locked)
+        {
+            if (currentSession is not IHostSession hostSession || !currentSession.IsHost)
+            {
+                return false;
+            }
+
+            try
+            {
+                hostSession.IsLocked = locked;
+                await hostSession.SavePropertiesAsync();
+                SetState(State, locked ? "Room locked for the match." : "Room reopened for players.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Could not {(locked ? "lock" : "unlock")} Session: {exception}");
+                SetFailure(SessionFailureMapper.Map(exception));
+                return false;
             }
         }
 
@@ -178,6 +203,13 @@ namespace CockroachFantasia.Networking
                 ? string.Empty
                 : new string(roomCode.Where(character => !char.IsWhiteSpace(character) && character != '-').ToArray())
                     .ToUpperInvariant();
+        }
+
+        public static bool IsValidRoomCode(string normalizedCode)
+        {
+            const string validCharacters = "6789BCDFGHJKLMNPQRTW";
+            return normalizedCode is { Length: >= 6 and <= 12 } &&
+                   normalizedCode.All(character => validCharacters.IndexOf(character) >= 0);
         }
 
         private bool CanBeginConnection()
@@ -217,6 +249,9 @@ namespace CockroachFantasia.Networking
             currentSession.Changed += OnSessionChanged;
             currentSession.RemovedFromSession += OnRemovedFromSession;
             currentSession.Deleted += OnRemovedFromSession;
+            currentSession.StateChanged += OnSessionStateChanged;
+            SubscribeNetworkCallbacks();
+            LastFailureKind = SessionFailureKind.None;
             OnSessionChanged();
         }
 
@@ -230,6 +265,8 @@ namespace CockroachFantasia.Networking
             currentSession.Changed -= OnSessionChanged;
             currentSession.RemovedFromSession -= OnRemovedFromSession;
             currentSession.Deleted -= OnRemovedFromSession;
+            currentSession.StateChanged -= OnSessionStateChanged;
+            UnsubscribeNetworkCallbacks();
             currentSession = null;
             SessionChanged?.Invoke();
         }
@@ -241,15 +278,116 @@ namespace CockroachFantasia.Networking
 
         private void OnRemovedFromSession()
         {
-            DetachSession();
-            SetState(SessionConnectionState.Idle, "The room was closed.");
+            if (!voluntaryLeave)
+            {
+                HandleTerminalDisconnect(currentSession != null && !currentSession.IsHost
+                    ? SessionFailureKind.HostLeft
+                    : SessionFailureKind.Disconnected);
+            }
         }
 
-        private void HandleConnectionFailure(string friendlyMessage, Exception exception)
+        private void OnSessionStateChanged(SessionState sessionState)
+        {
+            if (!voluntaryLeave && (sessionState == SessionState.Deleted || sessionState == SessionState.Disconnected))
+            {
+                HandleTerminalDisconnect(currentSession != null && !currentSession.IsHost
+                    ? SessionFailureKind.HostLeft
+                    : SessionFailureKind.Disconnected);
+            }
+        }
+
+        private void OnClientDisconnected(ulong clientId)
+        {
+            var manager = Unity.Netcode.NetworkManager.Singleton;
+            if (voluntaryLeave || currentSession == null || currentSession.IsHost || manager == null ||
+                clientId != manager.LocalClientId)
+            {
+                SessionChanged?.Invoke();
+                return;
+            }
+
+            HandleTerminalDisconnect(SessionFailureKind.HostLeft);
+        }
+
+        private async void HandleTerminalDisconnect(SessionFailureKind kind)
+        {
+            if (handlingTerminalDisconnect)
+            {
+                return;
+            }
+
+            handlingTerminalDisconnect = true;
+            var disconnectedSession = currentSession;
+            DetachSession();
+            EnsureNetworkStopped();
+            SetFailure(kind);
+            LoadFrontEndIfNeeded();
+
+            if (disconnectedSession != null && disconnectedSession.IsMember)
+            {
+                try
+                {
+                    await disconnectedSession.LeaveAsync();
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning($"Session cleanup after disconnect failed: {exception.Message}");
+                }
+            }
+
+            handlingTerminalDisconnect = false;
+        }
+
+        private void HandleConnectionFailure(Exception exception)
         {
             Debug.LogWarning($"Session connection failed: {exception}");
             DetachSession();
-            SetState(SessionConnectionState.Failed, friendlyMessage);
+            EnsureNetworkStopped();
+            SetFailure(SessionFailureMapper.Map(exception));
+        }
+
+        private void SubscribeNetworkCallbacks()
+        {
+            var manager = Unity.Netcode.NetworkManager.Singleton;
+            if (manager == null)
+            {
+                return;
+            }
+
+            manager.OnClientDisconnectCallback -= OnClientDisconnected;
+            manager.OnClientDisconnectCallback += OnClientDisconnected;
+        }
+
+        private void UnsubscribeNetworkCallbacks()
+        {
+            var manager = Unity.Netcode.NetworkManager.Singleton;
+            if (manager != null)
+            {
+                manager.OnClientDisconnectCallback -= OnClientDisconnected;
+            }
+        }
+
+        private static void EnsureNetworkStopped()
+        {
+            var manager = Unity.Netcode.NetworkManager.Singleton;
+            if (manager != null && manager.IsListening)
+            {
+                manager.Shutdown();
+            }
+        }
+
+        private static void LoadFrontEndIfNeeded()
+        {
+            if (Application.isPlaying && SceneManager.GetActiveScene().name != "FrontEnd")
+            {
+                SceneManager.LoadScene("FrontEnd", LoadSceneMode.Single);
+            }
+        }
+
+        private void SetFailure(SessionFailureKind kind, string message = null)
+        {
+            LastFailureKind = kind;
+            SetState(SessionConnectionState.Failed, message ?? SessionFailureMapper.ToUserMessage(kind));
         }
 
         private void SetState(SessionConnectionState state, string message)
