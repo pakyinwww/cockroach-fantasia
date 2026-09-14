@@ -165,14 +165,19 @@ namespace CockroachFantasia.Editor
             {
                 var definition = Scenes[index];
                 var path = $"{ScenesRoot}/{definition.Name}.unity";
-                var scene = File.Exists(path)
+                var sceneAlreadyExists = File.Exists(path);
+                var scene = sceneAlreadyExists
                     ? EditorSceneManager.OpenScene(path, OpenSceneMode.Single)
                     : EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
                 var rootName = $"{definition.Name}Root";
                 var root = GameObject.Find(rootName) ?? new GameObject(rootName);
                 var marker = root.GetComponent<FoundationMarker>() ?? root.AddComponent<FoundationMarker>();
-                marker.Configure(definition.Purpose);
+                if (marker.ScenePurpose != definition.Purpose)
+                {
+                    marker.Configure(definition.Purpose);
+                    EditorUtility.SetDirty(marker);
+                }
 
                 if (definition.Name == "Bootstrap" && root.GetComponent<ServicesBootstrap>() == null)
                 {
@@ -185,7 +190,10 @@ namespace CockroachFantasia.Editor
                     CreateLobbyInterface(scene);
                 }
 
-                EditorSceneManager.SaveScene(scene, path);
+                if (!sceneAlreadyExists || scene.isDirty)
+                {
+                    EditorSceneManager.SaveScene(scene, path);
+                }
                 buildScenes[index] = new EditorBuildSettingsScene(path, true);
             }
 
@@ -263,6 +271,13 @@ namespace CockroachFantasia.Editor
         private static void CreateLobbyInterface(Scene scene)
         {
             var existingCanvas = GameObject.Find("LobbyCanvas");
+            if (existingCanvas != null && existingCanvas.GetComponent<LobbyRosterPresenter>() != null &&
+                GameObject.Find("Ready") != null && GameObject.Find("Start") != null &&
+                GameObject.Find("LoadingPanel") != null)
+            {
+                return;
+            }
+
             if (existingCanvas != null) UnityEngine.Object.DestroyImmediate(existingCanvas);
             var existingEventSystem = GameObject.Find("EventSystem");
             if (existingEventSystem != null) UnityEngine.Object.DestroyImmediate(existingEventSystem);

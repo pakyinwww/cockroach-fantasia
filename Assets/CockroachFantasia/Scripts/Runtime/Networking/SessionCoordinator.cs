@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CockroachFantasia.App;
-using Unity.Services.Multiplayer;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -17,7 +16,8 @@ namespace CockroachFantasia.Networking
 
         private static SessionCoordinator instance;
         private CancellationTokenSource lifetimeCancellation;
-        private ISession currentSession;
+        private IPrivateSession currentSession;
+        private IPrivateSessionGateway sessionGateway;
         private bool voluntaryLeave;
         private bool handlingTerminalDisconnect;
 
@@ -27,7 +27,7 @@ namespace CockroachFantasia.Networking
         public string StatusMessage { get; private set; } = "Not connected.";
         public SessionFailureKind LastFailureKind { get; private set; } = SessionFailureKind.None;
         public int PlayerCount => currentSession?.PlayerCount ?? 0;
-        public ISession CurrentSession => currentSession;
+        public IPrivateSession CurrentSession => currentSession;
 
         public event Action<SessionConnectionState, string> StatusChanged;
         public event Action SessionChanged;
@@ -52,6 +52,7 @@ namespace CockroachFantasia.Networking
             }
 
             instance = this;
+            sessionGateway ??= new UnityPrivateSessionGateway();
             lifetimeCancellation = new CancellationTokenSource();
             DontDestroyOnLoad(gameObject);
         }
@@ -80,17 +81,7 @@ namespace CockroachFantasia.Networking
             try
             {
                 await EnsureServicesReadyAsync(cancellationToken);
-                var options = new SessionOptions
-                {
-                    Name = $"Kitchen-{Guid.NewGuid():N}",
-                    Type = SessionType,
-                    MaxPlayers = MaximumPlayers,
-                    IsPrivate = true,
-                    IsLocked = false
-                }.WithNetworkOptions(new NetworkOptions { RelayProtocol = RelayProtocol.DTLS })
-                 .WithRelayNetwork();
-
-                AttachSession(await MultiplayerService.Instance.CreateSessionAsync(options));
+                AttachSession(await sessionGateway.CreateAsync(MaximumPlayers, SessionType, cancellationToken));
                 SetState(SessionConnectionState.Connected, $"Room {RoomCode} ready — share this code with friends.");
                 return true;
             }
@@ -119,9 +110,7 @@ namespace CockroachFantasia.Networking
             try
             {
                 await EnsureServicesReadyAsync(cancellationToken);
-                var joinOptions = new JoinSessionOptions { Type = SessionType }
-                    .WithNetworkOptions(new NetworkOptions { RelayProtocol = RelayProtocol.DTLS });
-                AttachSession(await MultiplayerService.Instance.JoinSessionByCodeAsync(normalized, joinOptions));
+                AttachSession(await sessionGateway.JoinAsync(normalized, SessionType, cancellationToken));
                 SetState(SessionConnectionState.Connected, $"Joined room {RoomCode}.");
                 return true;
             }
@@ -168,15 +157,14 @@ namespace CockroachFantasia.Networking
 
         public async Task<bool> SetSessionLockedAsync(bool locked)
         {
-            if (currentSession is not IHostSession hostSession || !currentSession.IsHost)
+            if (currentSession == null || !currentSession.IsHost)
             {
                 return false;
             }
 
             try
             {
-                hostSession.IsLocked = locked;
-                await hostSession.SavePropertiesAsync();
+                await currentSession.SetLockedAsync(locked);
                 SetState(State, locked ? "Room locked for the match." : "Room reopened for players.");
                 return true;
             }
@@ -195,6 +183,11 @@ namespace CockroachFantasia.Networking
                 GUIUtility.systemCopyBuffer = RoomCode;
                 SetState(State, $"Copied room code {RoomCode}.");
             }
+        }
+
+        public void ConfigureSessionGatewayForTests(IPrivateSessionGateway gateway)
+        {
+            sessionGateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
         }
 
         public static string NormalizeRoomCode(string roomCode)
@@ -243,11 +236,11 @@ namespace CockroachFantasia.Networking
             }
         }
 
-        private void AttachSession(ISession session)
+        private void AttachSession(IPrivateSession session)
         {
             currentSession = session ?? throw new ArgumentNullException(nameof(session));
             currentSession.Changed += OnSessionChanged;
-            currentSession.RemovedFromSession += OnRemovedFromSession;
+            currentSession.Removed += OnRemovedFromSession;
             currentSession.Deleted += OnRemovedFromSession;
             currentSession.StateChanged += OnSessionStateChanged;
             SubscribeNetworkCallbacks();
@@ -263,7 +256,7 @@ namespace CockroachFantasia.Networking
             }
 
             currentSession.Changed -= OnSessionChanged;
-            currentSession.RemovedFromSession -= OnRemovedFromSession;
+            currentSession.Removed -= OnRemovedFromSession;
             currentSession.Deleted -= OnRemovedFromSession;
             currentSession.StateChanged -= OnSessionStateChanged;
             UnsubscribeNetworkCallbacks();
@@ -286,9 +279,9 @@ namespace CockroachFantasia.Networking
             }
         }
 
-        private void OnSessionStateChanged(SessionState sessionState)
+        private void OnSessionStateChanged(PrivateSessionState sessionState)
         {
-            if (!voluntaryLeave && (sessionState == SessionState.Deleted || sessionState == SessionState.Disconnected))
+            if (!voluntaryLeave && (sessionState == PrivateSessionState.Deleted || sessionState == PrivateSessionState.Disconnected))
             {
                 HandleTerminalDisconnect(currentSession != null && !currentSession.IsHost
                     ? SessionFailureKind.HostLeft
