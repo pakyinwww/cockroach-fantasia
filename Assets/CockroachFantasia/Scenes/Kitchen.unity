@@ -545,7 +545,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 46e13ac1508c43a7bd60af0caad3c74a, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.World.FoodSpawnMarker
   index: 5
   risk: 0
@@ -622,7 +622,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 46e13ac1508c43a7bd60af0caad3c74a, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.World.FoodSpawnMarker
   index: 15
   risk: 2
@@ -668,7 +668,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 50c0a7b91cd64284ad2eef099162b5f1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.World.KitchenSpawnMarker
   seat: 2
 --- !u!1 &343643163
@@ -858,7 +858,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 50c0a7b91cd64284ad2eef099162b5f1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.World.KitchenSpawnMarker
   seat: 1
 --- !u!1 &360744346
@@ -2225,6 +2225,7 @@ GameObject:
   - component: {fileID: 1035384957}
   - component: {fileID: 1035384958}
   - component: {fileID: 1035384959}
+  - component: {fileID: 1035384960}
   m_Layer: 0
   m_Name: KitchenRoot
   m_TagString: Untagged
@@ -2311,6 +2312,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.Gameplay.NetworkGameManager
   ShowTopMostFoldoutHeaderGroup: 1
   rules: {fileID: 11400000, guid: d6226fa03bd542641b96c5e1fccca70d, type: 2}
+--- !u!114 &1035384960
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1035384954}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f411b07cf6bc47a49a9f79cc6291dc43, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.Food.KitchenFoodSpawner
+  spawnSet: {fileID: 11400000, guid: cb33a57e8632f9e4faa1fc40ab3ac1d4, type: 2}
 --- !u!1 &1057925647
 GameObject:
   m_ObjectHideFlags: 0

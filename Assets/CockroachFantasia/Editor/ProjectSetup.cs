@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using CockroachFantasia.App;
 using CockroachFantasia.Characters;
+using CockroachFantasia.Food;
 using CockroachFantasia.Gameplay;
 using CockroachFantasia.Networking;
 using CockroachFantasia.UI;
@@ -31,6 +32,9 @@ namespace CockroachFantasia.Editor
         private const string HumanPlayerPath = Root + "/Resources/Networking/HumanPlayer.prefab";
         private const string NetworkPrefabsPath = Root + "/Resources/Networking/CockroachNetworkPrefabs.asset";
         private const string MatchRulesPath = Root + "/Data/MatchRules/DefaultMatchRules.asset";
+        private const string FoodDataRoot = Root + "/Data/FoodDefinitions";
+        private const string FoodPrefabRoot = Root + "/Resources/Food";
+        private const string FoodSpawnSetPath = FoodDataRoot + "/FixedKitchenFood.asset";
 
         private static readonly (string Name, string Purpose)[] Scenes =
         {
@@ -129,7 +133,7 @@ namespace CockroachFantasia.Editor
                 "Audio/Music", "Audio/SFX", "Data/MatchRules", "Data/FoodDefinitions",
                 "Input", "Prefabs/Characters", "Prefabs/Food", "Prefabs/Networking",
                 "Prefabs/Props", "Prefabs/UI", "Scenes", "Settings",
-                "Resources/Networking",
+                "Resources/Networking", "Resources/Food",
                 "Scripts/Runtime/App", "Scripts/Runtime/Camera", "Scripts/Runtime/Characters",
                 "Scripts/Runtime/Food", "Scripts/Runtime/Gameplay", "Scripts/Runtime/Networking",
                 "Scripts/Runtime/UI", "Scripts/Runtime/World", "Scripts/Tests/EditMode", "Scripts/Tests/PlayMode"
@@ -254,6 +258,9 @@ namespace CockroachFantasia.Editor
                     }
                     gameManager.Configure(AssetDatabase.LoadAssetAtPath<MatchRules>(MatchRulesPath));
                     EditorUtility.SetDirty(gameManager);
+                    var foodSpawner = root.GetComponent<KitchenFoodSpawner>() ?? root.AddComponent<KitchenFoodSpawner>();
+                    foodSpawner.Configure(AssetDatabase.LoadAssetAtPath<FoodSpawnSet>(FoodSpawnSetPath));
+                    EditorUtility.SetDirty(foodSpawner);
                     CreateKitchenLayout(scene);
                 }
 
@@ -409,6 +416,74 @@ namespace CockroachFantasia.Editor
                 prefabList.Add(new NetworkPrefab { Prefab = humanPrefab });
                 EditorUtility.SetDirty(prefabList);
             }
+
+            CreateFoodAssets(prefabList);
+        }
+
+        private static void CreateFoodAssets(NetworkPrefabsList prefabList)
+        {
+            var small = EnsureFoodDefinition(FoodSize.Small, "Cracker Crumb", 1, 0.95f,
+                PrimitiveType.Cube, new Vector3(0.18f, 0.06f, 0.14f), new Color(0.82f, 0.59f, 0.27f));
+            var medium = EnsureFoodDefinition(FoodSize.Medium, "Cheese Cube", 2, 0.85f,
+                PrimitiveType.Cube, new Vector3(0.22f, 0.2f, 0.22f), new Color(1f, 0.72f, 0.12f));
+            var large = EnsureFoodDefinition(FoodSize.Large, "Doughnut Piece", 3, 0.70f,
+                PrimitiveType.Sphere, new Vector3(0.34f, 0.14f, 0.3f), new Color(0.93f, 0.42f, 0.55f));
+
+            foreach (var definition in new[] { small, medium, large })
+            {
+                if (!prefabList.Contains(definition.NetworkPrefab))
+                    prefabList.Add(new NetworkPrefab { Prefab = definition.NetworkPrefab });
+            }
+            EditorUtility.SetDirty(prefabList);
+
+            var spawnSet = AssetDatabase.LoadAssetAtPath<FoodSpawnSet>(FoodSpawnSetPath);
+            if (spawnSet == null)
+            {
+                spawnSet = ScriptableObject.CreateInstance<FoodSpawnSet>();
+                AssetDatabase.CreateAsset(spawnSet, FoodSpawnSetPath);
+            }
+            spawnSet.Configure(new[]
+            {
+                new FoodSpawnEntry(0, small), new FoodSpawnEntry(1, small), new FoodSpawnEntry(2, small),
+                new FoodSpawnEntry(6, medium), new FoodSpawnEntry(7, medium), new FoodSpawnEntry(8, medium),
+                new FoodSpawnEntry(12, large), new FoodSpawnEntry(13, large), new FoodSpawnEntry(14, large)
+            });
+            EditorUtility.SetDirty(spawnSet);
+        }
+
+        private static FoodDefinition EnsureFoodDefinition(FoodSize size, string label, int points,
+            float speedMultiplier, PrimitiveType primitive, Vector3 scale, Color color)
+        {
+            var definitionPath = $"{FoodDataRoot}/{size}Food.asset";
+            var definition = AssetDatabase.LoadAssetAtPath<FoodDefinition>(definitionPath);
+            if (definition == null)
+            {
+                definition = ScriptableObject.CreateInstance<FoodDefinition>();
+                AssetDatabase.CreateAsset(definition, definitionPath);
+            }
+
+            var prefabPath = $"{FoodPrefabRoot}/{size}Food.prefab";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null)
+            {
+                var food = GameObject.CreatePrimitive(primitive);
+                food.name = size + "Food";
+                food.transform.localScale = scale;
+                food.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial("Food" + size, color);
+                food.AddComponent<NetworkObject>();
+                food.AddComponent<Unity.Netcode.Components.NetworkTransform>();
+                food.AddComponent<FoodItem>().Configure(definition);
+                prefab = PrefabUtility.SaveAsPrefabAsset(food, prefabPath);
+                UnityEngine.Object.DestroyImmediate(food);
+            }
+
+            definition.Configure(size, label, points, speedMultiplier, prefab);
+            EditorUtility.SetDirty(definition);
+            var contents = PrefabUtility.LoadPrefabContents(prefabPath);
+            contents.GetComponent<FoodItem>().Configure(definition);
+            PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
+            PrefabUtility.UnloadPrefabContents(contents);
+            return definition;
         }
 
         private static GameObject EnsurePlayerNetworking(string prefabPath, float baseSpeed)

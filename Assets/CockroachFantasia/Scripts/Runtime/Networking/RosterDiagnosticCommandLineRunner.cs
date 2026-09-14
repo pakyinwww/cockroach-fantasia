@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using CockroachFantasia.Characters;
+using CockroachFantasia.Food;
 using CockroachFantasia.Gameplay;
 using Unity.Netcode;
 using Unity.Profiling;
@@ -185,6 +186,25 @@ namespace CockroachFantasia.Networking
                     var game = NetworkGameManager.Instance;
                     Debug.Log($"MATCH_STATE_DIAGNOSTIC phase={game.Phase} " +
                               $"deadline={game.PlayingEndTimestamp:F3} remaining={game.RemainingPlayingSeconds:F3}");
+                }
+
+                if (arguments.Contains("-foodSpawnSmoke"))
+                {
+                    var authored = UnityEngine.Object.FindFirstObjectByType<KitchenFoodSpawner>()?.SpawnSet;
+                    if (!FoodConfigurationValidator.TryValidate(authored, out var authoredPoints, out var rejection))
+                        throw new InvalidOperationException("Invalid authored food: " + rejection);
+                    await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<FoodItem>(
+                            FindObjectsSortMode.None).Length == authored.Entries.Length,
+                        TimeSpan.FromSeconds(15), "authoritative food spawn set");
+                    var items = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+                    if (items.Any(item => item.Lifecycle != FoodLifecycleState.World ||
+                                          item.CarrierClientId != FoodItem.NoCarrier ||
+                                          item.Definition == null || item.Size != item.Definition.Size) ||
+                        items.Sum(item => item.Definition.Points) != authoredPoints)
+                        throw new InvalidOperationException("Replicated food state did not match the authored set.");
+                    var sizes = string.Join(",", items.GroupBy(item => item.Size).OrderBy(group => group.Key)
+                        .Select(group => $"{group.Key}:{group.Count()}"));
+                    Debug.Log($"FOOD_SPAWN_DIAGNOSTIC items={items.Length} points={authoredPoints} sizes={sizes}");
                 }
 
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);

@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Linq;
+using CockroachFantasia.Food;
 using CockroachFantasia.Gameplay;
 using CockroachFantasia.Networking;
 using CockroachFantasia.World;
@@ -51,6 +52,11 @@ namespace CockroachFantasia.Tests.PlayMode
             Assert.That(gameManager.Rules.FoodQuotaPoints, Is.EqualTo(12));
             Assert.That(gameManager.Rules.CountdownSeconds, Is.EqualTo(3f));
             Assert.That(gameManager.Rules.RespawnDelaySeconds, Is.EqualTo(3f));
+            var foodSpawner = Object.FindFirstObjectByType<KitchenFoodSpawner>();
+            Assert.That(foodSpawner, Is.Not.Null);
+            Assert.That(FoodConfigurationValidator.TryValidate(foodSpawner.SpawnSet, out var foodPoints,
+                out var foodRejection), Is.True, foodRejection);
+            Assert.That(foodPoints, Is.EqualTo(18));
             Assert.That(GameObject.Find("Huge_Mug").GetComponent<Collider>(), Is.Null);
             Assert.That(GameObject.Find("Fruit_Bowl").GetComponent<Collider>(), Is.Null);
 

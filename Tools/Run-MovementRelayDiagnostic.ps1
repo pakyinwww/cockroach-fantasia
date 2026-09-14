@@ -5,7 +5,8 @@ param(
     [ValidateRange(0, 100)][int]$PacketLossPercent = 0,
     [switch]$TeleportViolation,
     [switch]$MatchState,
-    [switch]$SkipMovement
+    [switch]$SkipMovement,
+    [switch]$FoodSpawn
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,7 @@ $common = "-batchmode -nographics -rosterExpectedPlayers 4 -requireValidDistribu
           "-simulateLossPercent $PacketLossPercent"
 if (-not $SkipMovement) { $common += ' -movementSmoke' }
 if ($MatchState) { $common += ' -matchStateSmoke' }
+if ($FoodSpawn) { $common += ' -foodSpawnSmoke' }
 $players = @(
     @{ Key = 'host'; Name = 'Human'; Seat = 'Human'; Extra = '-rosterHostSmoke -rosterStartMatch -rosterDurationSeconds 8' },
     @{ Key = 'c1'; Name = 'RoachA'; Seat = 'CockroachOne'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
@@ -71,6 +73,7 @@ $results = for ($index = 0; $index -lt $players.Count; $index++) {
         Movement = (Select-String -Path $logPath -Pattern 'MOVEMENT_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
         Correction = (Select-String -Path $logPath -Pattern 'MOVEMENT_CORRECTION_SUCCESS' | ForEach-Object Line) -join ''
         MatchState = (Select-String -Path $logPath -Pattern 'MATCH_STATE_DIAGNOSTIC' | ForEach-Object Line) -join ''
+        FoodSpawn = (Select-String -Path $logPath -Pattern 'FOOD_SPAWN_DIAGNOSTIC' | ForEach-Object Line) -join ''
     }
 }
 
@@ -78,7 +81,8 @@ $results | Format-Table -AutoSize
 if ($processes.Where({ $_.ExitCode -ne 0 }).Count -gt 0 -or
     (-not $SkipMovement -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Movement) }).Count -gt 0) -or
     ($TeleportViolation -and [string]::IsNullOrWhiteSpace($results[1].Correction)) -or
-    ($MatchState -and $results.Where({ [string]::IsNullOrWhiteSpace($_.MatchState) }).Count -gt 0)) {
+    ($MatchState -and $results.Where({ [string]::IsNullOrWhiteSpace($_.MatchState) }).Count -gt 0) -or
+    ($FoodSpawn -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodSpawn) }).Count -gt 0)) {
     throw "Movement diagnostic failed. Inspect $outputDirectory."
 }
 
