@@ -1,8 +1,10 @@
 using System;
+using System.Collections;
 using System.Linq;
 using CockroachFantasia.Characters;
 using CockroachFantasia.Gameplay;
 using CockroachFantasia.Networking;
+using CockroachFantasia.World;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -93,7 +95,8 @@ namespace CockroachFantasia.Food
             RpcParams rpcParams = default)
         {
             if (!Debug.isDebugBuild || !Environment.GetCommandLineArgs().Contains("-foodCarrySmoke") ||
-                !targetReference.TryGet(out var targetObject)) return;
+                !targetReference.TryGet(out var targetObject))
+                return;
             motor.RecoverTo(targetObject.transform.position + Vector3.right * 0.25f);
             TryPickupByServer(targetReference, rpcParams.Receive.SenderClientId);
         }
@@ -113,6 +116,20 @@ namespace CockroachFantasia.Food
             return dropped;
         }
 
+        public bool TryDepositByServer()
+        {
+            var game = NetworkGameManager.Instance;
+            if (!IsServer || game == null || !game.AcceptsGameplayRequests ||
+                !TryGetCarriedFood(out var food) || food.Definition == null) return false;
+            var points = food.Definition.Points;
+            if (!food.TryDepositByServer(OwnerClientId)) return false;
+            carriedFoodNetworkId.Value = NoFood;
+            if (!game.TryDepositPointsByServer(points))
+                throw new InvalidOperationException("A validated food deposit was rejected by match state.");
+            food.NetworkObject.Despawn(true);
+            return true;
+        }
+
         private bool CanProcessRequest(ulong senderClientId)
         {
             if (!IsServer || senderClientId != OwnerClientId ||
@@ -126,15 +143,25 @@ namespace CockroachFantasia.Food
         private void TryPickupByServer(NetworkObjectReference targetReference, ulong senderClientId)
         {
             if (!CanProcessRequest(senderClientId) || IsCarrying ||
-                !targetReference.TryGet(out var targetObject)) return;
+                !targetReference.TryGet(out var targetObject))
+                return;
             var food = targetObject.GetComponent<FoodItem>();
             if (food == null || food.Lifecycle != FoodLifecycleState.World ||
-                Vector3.Distance(transform.position, food.transform.position) > pickupRadius) return;
+                Vector3.Distance(transform.position, food.transform.position) > pickupRadius)
+                return;
 
             // RPCs are processed serially on the server. TryClaimByServer changes the
             // lifecycle immediately, so simultaneous requests yield one winner.
             if (!food.TryClaimByServer(OwnerClientId)) return;
             carriedFoodNetworkId.Value = targetObject.NetworkObjectId;
+            if (Debug.isDebugBuild && Environment.GetCommandLineArgs().Contains("-foodDepositSmoke"))
+                StartCoroutine(DepositAfterDiagnosticDelay());
+        }
+
+        private IEnumerator DepositAfterDiagnosticDelay()
+        {
+            yield return new WaitForSeconds(0.5f);
+            UnityEngine.Object.FindFirstObjectByType<NestZone>()?.TryDepositCarrierByServer(this);
         }
 
         private FoodItem FindBestNearbyFood()

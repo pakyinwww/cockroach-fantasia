@@ -1,3 +1,5 @@
+using CockroachFantasia.Food;
+using Unity.Netcode;
 using UnityEngine;
 
 namespace CockroachFantasia.World
@@ -13,6 +15,18 @@ namespace CockroachFantasia.World
             entrance = entranceMarker;
             var trigger = GetComponent<BoxCollider>();
             trigger.isTrigger = true;
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            var carrier = other.GetComponentInParent<CockroachFoodCarrier>();
+            if (carrier != null) TryDepositCarrierByServer(carrier);
+        }
+
+        public bool TryDepositCarrierByServer(CockroachFoodCarrier carrier)
+        {
+            var manager = NetworkManager.Singleton;
+            return manager != null && manager.IsServer && carrier != null && carrier.TryDepositByServer();
         }
 
         private void OnDrawGizmos()

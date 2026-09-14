@@ -60,20 +60,35 @@ namespace CockroachFantasia.Food
 
         public bool TryClaimByServer(ulong clientId)
         {
-            if (!IsServer || lifecycle.Value != FoodLifecycleState.World ||
-                carrierClientId.Value != NoCarrier) return false;
-            carrierClientId.Value = clientId;
-            lifecycle.Value = FoodLifecycleState.Carried;
+            if (!IsServer) return false;
+            var nextLifecycle = lifecycle.Value;
+            var nextCarrier = carrierClientId.Value;
+            if (!FoodLifecycleRules.TryClaim(ref nextLifecycle, ref nextCarrier, clientId)) return false;
+            carrierClientId.Value = nextCarrier;
+            lifecycle.Value = nextLifecycle;
             return true;
         }
 
         public bool TryDropByServer(ulong clientId, Vector3 floorPosition)
         {
-            if (!IsServer || lifecycle.Value != FoodLifecycleState.Carried ||
-                carrierClientId.Value != clientId) return false;
+            if (!IsServer) return false;
+            var nextLifecycle = lifecycle.Value;
+            var nextCarrier = carrierClientId.Value;
+            if (!FoodLifecycleRules.TryDrop(ref nextLifecycle, ref nextCarrier, clientId)) return false;
             transform.position = floorPosition;
-            carrierClientId.Value = NoCarrier;
-            lifecycle.Value = FoodLifecycleState.World;
+            carrierClientId.Value = nextCarrier;
+            lifecycle.Value = nextLifecycle;
+            return true;
+        }
+
+        public bool TryDepositByServer(ulong clientId)
+        {
+            if (!IsServer) return false;
+            var nextLifecycle = lifecycle.Value;
+            var nextCarrier = carrierClientId.Value;
+            if (!FoodLifecycleRules.TryDeposit(ref nextLifecycle, ref nextCarrier, clientId)) return false;
+            carrierClientId.Value = nextCarrier;
+            lifecycle.Value = nextLifecycle;
             return true;
         }
 
