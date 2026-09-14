@@ -24,7 +24,12 @@ $arguments = @(
     '-logFile', $logPath
 )
 
-$process = Start-Process -FilePath $EditorPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
+$process = Start-Process -FilePath $EditorPath -ArgumentList $arguments -WindowStyle Hidden -PassThru
+if (-not $process.WaitForExit(600000)) {
+    Stop-Process -Id $process.Id -Force
+    throw "Unity $Suite tests timed out after 10 minutes. See $logPath."
+}
+$process.Refresh()
 if ($process.ExitCode -ne 0) {
     Write-Error "Unity $Suite tests failed with exit code $($process.ExitCode). See $logPath and $resultPath."
 }

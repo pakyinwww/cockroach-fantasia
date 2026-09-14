@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Linq;
+using CockroachFantasia.Gameplay;
 using CockroachFantasia.Networking;
 using CockroachFantasia.World;
 using NUnit.Framework;
@@ -42,6 +43,14 @@ namespace CockroachFantasia.Tests.PlayMode
 
             Assert.That(Object.FindFirstObjectByType<NestZone>(), Is.Not.Null);
             Assert.That(Object.FindFirstObjectByType<KitchenRecoveryVolume>(), Is.Not.Null);
+            var gameManager = Object.FindFirstObjectByType<NetworkGameManager>();
+            Assert.That(gameManager, Is.Not.Null);
+            Assert.That(gameManager.GetComponent<Unity.Netcode.NetworkObject>(), Is.Not.Null);
+            Assert.That(gameManager.Rules, Is.Not.Null);
+            Assert.That(gameManager.Rules.MatchDurationSeconds, Is.EqualTo(240f));
+            Assert.That(gameManager.Rules.FoodQuotaPoints, Is.EqualTo(12));
+            Assert.That(gameManager.Rules.CountdownSeconds, Is.EqualTo(3f));
+            Assert.That(gameManager.Rules.RespawnDelaySeconds, Is.EqualTo(3f));
             Assert.That(GameObject.Find("Huge_Mug").GetComponent<Collider>(), Is.Null);
             Assert.That(GameObject.Find("Fruit_Bowl").GetComponent<Collider>(), Is.Null);
 

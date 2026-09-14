@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using CockroachFantasia.App;
 using CockroachFantasia.Characters;
+using CockroachFantasia.Gameplay;
 using CockroachFantasia.Networking;
 using CockroachFantasia.UI;
 using CockroachFantasia.World;
@@ -29,6 +30,7 @@ namespace CockroachFantasia.Editor
         private const string CockroachPlayerPath = Root + "/Resources/Networking/CockroachPlayer.prefab";
         private const string HumanPlayerPath = Root + "/Resources/Networking/HumanPlayer.prefab";
         private const string NetworkPrefabsPath = Root + "/Resources/Networking/CockroachNetworkPrefabs.asset";
+        private const string MatchRulesPath = Root + "/Data/MatchRules/DefaultMatchRules.asset";
 
         private static readonly (string Name, string Purpose)[] Scenes =
         {
@@ -44,6 +46,7 @@ namespace CockroachFantasia.Editor
             CreateFolders();
             ConfigurePlayer();
             ConfigureRenderPipeline();
+            CreateMatchRules();
             CreateNetworkingAssets();
             CreateScenes();
             AssetDatabase.SaveAssets();
@@ -160,6 +163,19 @@ namespace CockroachFantasia.Editor
             }
         }
 
+        private static void CreateMatchRules()
+        {
+            var rules = AssetDatabase.LoadAssetAtPath<MatchRules>(MatchRulesPath);
+            if (rules == null)
+            {
+                rules = ScriptableObject.CreateInstance<MatchRules>();
+                AssetDatabase.CreateAsset(rules, MatchRulesPath);
+            }
+
+            rules.Configure(240f, 12, 3f, 3f);
+            EditorUtility.SetDirty(rules);
+        }
+
         private static void ConfigureRenderPipeline()
         {
             const string rendererPath = SettingsRoot + "/CockroachRenderer.asset";
@@ -230,6 +246,14 @@ namespace CockroachFantasia.Editor
                         root.AddComponent<KitchenPlayerSpawner>();
                         EditorSceneManager.MarkSceneDirty(scene);
                     }
+                    var gameManager = root.GetComponent<NetworkGameManager>();
+                    if (gameManager == null)
+                    {
+                        if (root.GetComponent<NetworkObject>() == null) root.AddComponent<NetworkObject>();
+                        gameManager = root.AddComponent<NetworkGameManager>();
+                    }
+                    gameManager.Configure(AssetDatabase.LoadAssetAtPath<MatchRules>(MatchRulesPath));
+                    EditorUtility.SetDirty(gameManager);
                     CreateKitchenLayout(scene);
                 }
 

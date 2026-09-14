@@ -3,7 +3,9 @@ param(
     [string]$OutputName = 'manual',
     [ValidateRange(0, 1000)][int]$OneWayDelayMs = 0,
     [ValidateRange(0, 100)][int]$PacketLossPercent = 0,
-    [switch]$TeleportViolation
+    [switch]$TeleportViolation,
+    [switch]$MatchState,
+    [switch]$SkipMovement
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,8 +16,10 @@ $roomCodePath = Join-Path $outputDirectory 'room-code.txt'
 Remove-Item -LiteralPath $roomCodePath -Force -ErrorAction SilentlyContinue
 
 $common = "-batchmode -nographics -rosterExpectedPlayers 4 -requireValidDistribution " +
-          "-rosterReady -rosterExpectKitchen -movementSmoke -simulateDelayMs $OneWayDelayMs " +
+          "-rosterReady -rosterExpectKitchen -simulateDelayMs $OneWayDelayMs " +
           "-simulateLossPercent $PacketLossPercent"
+if (-not $SkipMovement) { $common += ' -movementSmoke' }
+if ($MatchState) { $common += ' -matchStateSmoke' }
 $players = @(
     @{ Key = 'host'; Name = 'Human'; Seat = 'Human'; Extra = '-rosterHostSmoke -rosterStartMatch -rosterDurationSeconds 8' },
     @{ Key = 'c1'; Name = 'RoachA'; Seat = 'CockroachOne'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
@@ -66,12 +70,24 @@ $results = for ($index = 0; $index -lt $players.Count; $index++) {
         ExitCode = $processes[$index].ExitCode
         Movement = (Select-String -Path $logPath -Pattern 'MOVEMENT_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
         Correction = (Select-String -Path $logPath -Pattern 'MOVEMENT_CORRECTION_SUCCESS' | ForEach-Object Line) -join ''
+        MatchState = (Select-String -Path $logPath -Pattern 'MATCH_STATE_DIAGNOSTIC' | ForEach-Object Line) -join ''
     }
 }
 
 $results | Format-Table -AutoSize
 if ($processes.Where({ $_.ExitCode -ne 0 }).Count -gt 0 -or
-    $results.Where({ [string]::IsNullOrWhiteSpace($_.Movement) }).Count -gt 0 -or
-    ($TeleportViolation -and [string]::IsNullOrWhiteSpace($results[1].Correction))) {
+    (-not $SkipMovement -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Movement) }).Count -gt 0) -or
+    ($TeleportViolation -and [string]::IsNullOrWhiteSpace($results[1].Correction)) -or
+    ($MatchState -and $results.Where({ [string]::IsNullOrWhiteSpace($_.MatchState) }).Count -gt 0)) {
     throw "Movement diagnostic failed. Inspect $outputDirectory."
+}
+
+if ($MatchState) {
+    $deadlines = @($results.MatchState | ForEach-Object {
+        if ($_ -match 'deadline=(?<deadline>[0-9.]+)') { $Matches.deadline }
+    } | Select-Object -Unique)
+    if ($deadlines.Count -ne 1) {
+        throw "Clients did not receive one shared match deadline. Inspect $outputDirectory."
+    }
+    Write-Host "Shared authoritative deadline: $($deadlines[0])"
 }

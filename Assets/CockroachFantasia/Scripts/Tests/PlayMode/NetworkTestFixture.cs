@@ -14,6 +14,8 @@ namespace CockroachFantasia.Tests.PlayMode
 
         public void CreateHostAndClient()
         {
+            foreach (var networkObject in Object.FindObjectsByType<NetworkObject>(FindObjectsSortMode.None))
+                Object.DestroyImmediate(networkObject.gameObject);
             if (NetworkManager.Singleton != null)
                 Object.DestroyImmediate(NetworkManager.Singleton.gameObject);
 

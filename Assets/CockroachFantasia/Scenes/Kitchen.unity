@@ -2223,6 +2223,8 @@ GameObject:
   - component: {fileID: 1035384956}
   - component: {fileID: 1035384955}
   - component: {fileID: 1035384957}
+  - component: {fileID: 1035384958}
+  - component: {fileID: 1035384959}
   m_Layer: 0
   m_Name: KitchenRoot
   m_TagString: Untagged
@@ -2270,6 +2272,45 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ddb03c4a9eec4831a1d574f28d4639d0, type: 3}
   m_Name:
   m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.Networking.KitchenPlayerSpawner
+--- !u!114 &1035384958
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1035384954}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 881944788
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 0
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!114 &1035384959
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1035384954}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a92475725bf47da819f1f02455dfce6, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.Gameplay.NetworkGameManager
+  ShowTopMostFoldoutHeaderGroup: 1
+  rules: {fileID: 11400000, guid: d6226fa03bd542641b96c5e1fccca70d, type: 2}
 --- !u!1 &1057925647
 GameObject:
   m_ObjectHideFlags: 0

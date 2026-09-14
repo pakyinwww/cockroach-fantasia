@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using CockroachFantasia.Characters;
+using CockroachFantasia.Gameplay;
 using Unity.Netcode;
 using Unity.Profiling;
 using UnityEngine;
@@ -172,6 +173,20 @@ namespace CockroachFantasia.Networking
                     await RunMovementSmokeAsync(arguments, localId, requestedSeat, expectedPlayers);
                 }
 
+                if (arguments.Contains("-matchStateSmoke"))
+                {
+                    await WaitUntilAsync(() =>
+                    {
+                        var current = NetworkGameManager.Instance;
+                        return current != null && current.Phase == MatchPhase.Playing &&
+                               current.PlayingEndTimestamp > NetworkManager.Singleton.ServerTime.Time &&
+                               current.RemainingPlayingSeconds > 230d && current.RemainingPlayingSeconds <= 240d;
+                    }, TimeSpan.FromSeconds(15), "coherent authoritative Playing state");
+                    var game = NetworkGameManager.Instance;
+                    Debug.Log($"MATCH_STATE_DIAGNOSTIC phase={game.Phase} " +
+                              $"deadline={game.PlayingEndTimestamp:F3} remaining={game.RemainingPlayingSeconds:F3}");
+                }
+
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
                 while (Time.realtimeSinceStartupAsDouble < end)
                 {
@@ -205,6 +220,9 @@ namespace CockroachFantasia.Networking
         private static async Task RunMovementSmokeAsync(string[] arguments, ulong localId, LobbySeat expectedSeat,
             int expectedPlayers)
         {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.Phase == MatchPhase.Playing,
+                TimeSpan.FromSeconds(15), "Playing phase before movement");
             await WaitUntilAsync(() =>
             {
                 var player = NetworkManager.Singleton?.LocalClient?.PlayerObject;

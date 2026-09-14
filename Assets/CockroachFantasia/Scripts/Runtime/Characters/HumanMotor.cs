@@ -1,8 +1,8 @@
+using CockroachFantasia.Gameplay;
 using CockroachFantasia.World;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 
 namespace CockroachFantasia.Characters
 {
@@ -54,7 +54,7 @@ namespace CockroachFantasia.Characters
 
         public override void OnNetworkSpawn()
         {
-            matchPlaying = SceneManager.GetActiveScene().name == "Kitchen";
+            matchPlaying = NetworkGameManager.Instance != null && NetworkGameManager.Instance.AcceptsGameplayRequests;
             SetLocalPresentation(IsOwner);
             if (IsOwner) Cursor.lockState = CursorLockMode.Locked;
         }
