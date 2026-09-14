@@ -3,6 +3,7 @@ using System.IO;
 using CockroachFantasia.App;
 using CockroachFantasia.Networking;
 using CockroachFantasia.UI;
+using CockroachFantasia.World;
 using Unity.Netcode;
 using UnityEditor;
 using UnityEditor.Build;
@@ -84,18 +85,48 @@ namespace CockroachFantasia.Editor
             }
         }
 
+        public static void CaptureKitchenPreviewBatch()
+        {
+            try
+            {
+                Run();
+                EditorSceneManager.OpenScene($"{ScenesRoot}/Kitchen.unity", OpenSceneMode.Single);
+                var camera = UnityEngine.Object.FindFirstObjectByType<Camera>() ??
+                             throw new InvalidOperationException("Kitchen preview camera is missing.");
+                var target = new RenderTexture(1280, 720, 24);
+                var image = new Texture2D(1280, 720, TextureFormat.RGB24, false);
+                camera.targetTexture = target;
+                camera.Render();
+                RenderTexture.active = target;
+                image.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0);
+                image.Apply();
+                Directory.CreateDirectory("Builds/Previews");
+                File.WriteAllBytes("Builds/Previews/KitchenGreybox.png", image.EncodeToPNG());
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                UnityEngine.Object.DestroyImmediate(image);
+                UnityEngine.Object.DestroyImmediate(target);
+                EditorApplication.Exit(0);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                EditorApplication.Exit(1);
+            }
+        }
+
         private static void CreateFolders()
         {
             string[] folders =
             {
-                "Art/Characters", "Art/Environment", "Art/Food", "Art/UI", "Art/VFX",
+                "Art/Characters", "Art/Environment", "Art/Food", "Art/Materials", "Art/UI", "Art/VFX",
                 "Audio/Music", "Audio/SFX", "Data/MatchRules", "Data/FoodDefinitions",
                 "Input", "Prefabs/Characters", "Prefabs/Food", "Prefabs/Networking",
                 "Prefabs/Props", "Prefabs/UI", "Scenes", "Settings",
                 "Resources/Networking",
                 "Scripts/Runtime/App", "Scripts/Runtime/Camera", "Scripts/Runtime/Characters",
                 "Scripts/Runtime/Food", "Scripts/Runtime/Gameplay", "Scripts/Runtime/Networking",
-                "Scripts/Runtime/UI", "Scripts/Tests/EditMode", "Scripts/Tests/PlayMode"
+                "Scripts/Runtime/UI", "Scripts/Runtime/World", "Scripts/Tests/EditMode", "Scripts/Tests/PlayMode"
             };
 
             foreach (var folder in folders)
@@ -188,6 +219,10 @@ namespace CockroachFantasia.Editor
                 if (definition.Name == "Lobby")
                 {
                     CreateLobbyInterface(scene);
+                }
+                else if (definition.Name == "Kitchen")
+                {
+                    CreateKitchenLayout(scene);
                 }
 
                 if (!sceneAlreadyExists || scene.isDirty)
@@ -388,6 +423,185 @@ namespace CockroachFantasia.Editor
             input.placeholder = placeholder;
             input.characterLimit = NetworkRoster.MaximumDisplayNameCharacters;
             return input;
+        }
+
+        private static void CreateKitchenLayout(Scene scene)
+        {
+            if (GameObject.Find("KitchenLayout") != null) return;
+
+            var shellMaterial = GetGreyboxMaterial("Shell", new Color(0.42f, 0.31f, 0.24f));
+            var counterMaterial = GetGreyboxMaterial("Counter", new Color(0.38f, 0.58f, 0.62f));
+            var cabinetMaterial = GetGreyboxMaterial("Cabinet", new Color(0.72f, 0.48f, 0.25f));
+            var nestMaterial = GetGreyboxMaterial("Nest", new Color(0.29f, 0.14f, 0.19f));
+            var routeMaterial = GetGreyboxMaterial("Route", new Color(0.82f, 0.72f, 0.38f));
+
+            var layout = new GameObject("KitchenLayout");
+            SceneManager.MoveGameObjectToScene(layout, scene);
+            var shell = NewGroup(layout.transform, "01_Shell_And_Bounds");
+            CreateBlock(shell, "Floor", new Vector3(0f, -0.25f, 0f), new Vector3(18f, 0.5f, 14f), shellMaterial);
+            CreateBlock(shell, "Bound_Back", new Vector3(0f, 2f, 7f), new Vector3(18f, 4f, 0.35f), shellMaterial);
+            CreateBlock(shell, "Bound_Front", new Vector3(0f, 2f, -7f), new Vector3(18f, 4f, 0.35f), shellMaterial);
+            CreateBlock(shell, "Bound_Left", new Vector3(-9f, 2f, 0f), new Vector3(0.35f, 4f, 14f), shellMaterial);
+            CreateBlock(shell, "Bound_Right", new Vector3(9f, 2f, 0f), new Vector3(0.35f, 4f, 14f), shellMaterial);
+
+            var routes = NewGroup(layout.transform, "02_Three_Routes");
+            var floorRoute = NewGroup(routes, "Route_A_Floor_Long");
+            CreateBlock(floorRoute, "Sight_Blocker_A", new Vector3(-1.4f, 1.15f, 0.6f),
+                new Vector3(2.5f, 2.3f, 2.3f), cabinetMaterial);
+            CreateBlock(floorRoute, "Sight_Blocker_B", new Vector3(4.1f, 0.9f, -0.3f),
+                new Vector3(2.2f, 1.8f, 3.3f), cabinetMaterial);
+            CreateBlock(floorRoute, "Low_Cover", new Vector3(-4.3f, 0.35f, -1.3f),
+                new Vector3(2.2f, 0.7f, 1.1f), routeMaterial);
+
+            var counterRoute = NewGroup(routes, "Route_B_Counter_High");
+            CreateBlock(counterRoute, "Counter_Left", new Vector3(-5.9f, 1.25f, -4.8f),
+                new Vector3(5.4f, 0.45f, 2.4f), counterMaterial);
+            CreateBlock(counterRoute, "Counter_Right", new Vector3(3.2f, 1.25f, -4.8f),
+                new Vector3(8.7f, 0.45f, 2.4f), counterMaterial);
+            CreateRamp(counterRoute, "Roach_Ramp_Left", new Vector3(-6.1f, 0.58f, -2.75f), -18f,
+                new Vector3(1.2f, 0.22f, 4.3f), routeMaterial);
+            CreateRamp(counterRoute, "Roach_Ramp_Right", new Vector3(6.2f, 0.58f, -2.75f), -18f,
+                new Vector3(1.2f, 0.22f, 4.3f), routeMaterial);
+
+            var cabinetRoute = NewGroup(routes, "Route_C_Cabinet_Tunnel");
+            CreateBlock(cabinetRoute, "Tunnel_Roof", new Vector3(5.9f, 0.78f, 3.7f),
+                new Vector3(5.2f, 0.22f, 1.8f), cabinetMaterial);
+            CreateBlock(cabinetRoute, "Tunnel_Back", new Vector3(5.9f, 0.4f, 4.55f),
+                new Vector3(5.2f, 0.8f, 0.18f), cabinetMaterial);
+            CreateBlock(cabinetRoute, "Tunnel_Pier_Left", new Vector3(3.35f, 0.4f, 3.7f),
+                new Vector3(0.18f, 0.8f, 1.8f), cabinetMaterial);
+            CreateBlock(cabinetRoute, "Tunnel_Pier_Right", new Vector3(8.45f, 0.4f, 3.7f),
+                new Vector3(0.18f, 0.8f, 1.8f), cabinetMaterial);
+
+            var nest = NewGroup(layout.transform, "03_Protected_Nest");
+            CreateBlock(nest, "Nest_Ceiling", new Vector3(-6.4f, 0.62f, 5.75f),
+                new Vector3(4.2f, 0.24f, 2.2f), nestMaterial);
+            CreateBlock(nest, "Nest_Left_Wall", new Vector3(-8.35f, 0.32f, 5.45f),
+                new Vector3(0.3f, 0.64f, 2.8f), nestMaterial);
+            CreateBlock(nest, "Entrance_Left_Jamb", new Vector3(-7.15f, 0.32f, 4.72f),
+                new Vector3(1.55f, 0.64f, 0.3f), nestMaterial);
+            CreateBlock(nest, "Entrance_Right_Jamb", new Vector3(-5.15f, 0.32f, 4.72f),
+                new Vector3(1.55f, 0.64f, 0.3f), nestMaterial);
+            CreateBlock(nest, "Human_Stop_Lintel", new Vector3(-6.15f, 0.59f, 4.72f),
+                new Vector3(0.55f, 0.18f, 0.3f), nestMaterial);
+
+            var entrance = new GameObject("Nest_Entrance").transform;
+            entrance.SetParent(nest, false);
+            entrance.SetPositionAndRotation(new Vector3(-6.15f, 0.05f, 4.55f), Quaternion.Euler(0f, 180f, 0f));
+            var nestZoneObject = new GameObject("Nest_Interior", typeof(BoxCollider), typeof(NestZone));
+            nestZoneObject.transform.SetParent(nest, false);
+            nestZoneObject.transform.SetPositionAndRotation(new Vector3(-6.4f, 0.27f, 5.7f), Quaternion.identity);
+            nestZoneObject.transform.localScale = new Vector3(3.6f, 0.5f, 1.7f);
+            nestZoneObject.GetComponent<NestZone>().Configure(entrance);
+
+            var spawns = NewGroup(layout.transform, "04_Player_Spawns");
+            CreateSpawn(spawns, "Spawn_Human", LobbySeat.Human, new Vector3(0f, 0.05f, -0.8f), 180f);
+            CreateSpawn(spawns, "Respawn_Roach_1", LobbySeat.CockroachOne, new Vector3(-7.35f, 0.05f, 5.65f), 180f);
+            CreateSpawn(spawns, "Respawn_Roach_2", LobbySeat.CockroachTwo, new Vector3(-6.7f, 0.05f, 5.65f), 180f);
+            CreateSpawn(spawns, "Respawn_Roach_3", LobbySeat.CockroachThree, new Vector3(-6.05f, 0.05f, 5.65f), 180f);
+
+            var food = NewGroup(layout.transform, "05_Food_Spawn_Markers_18");
+            var foodPositions = new[]
+            {
+                new Vector3(-4.9f, 0.12f, 4.6f), new Vector3(-3.7f, 0.12f, 3.4f),
+                new Vector3(-7.7f, 0.12f, 2.7f), new Vector3(-4.8f, 0.12f, 1.5f),
+                new Vector3(4.1f, 0.12f, 3.7f), new Vector3(7.1f, 0.12f, 3.7f),
+                new Vector3(-2.9f, 0.12f, -0.2f), new Vector3(0.4f, 0.12f, 2.7f),
+                new Vector3(2.6f, 0.12f, 1.9f), new Vector3(6.9f, 0.12f, 1.3f),
+                new Vector3(-7.2f, 1.62f, -4.8f), new Vector3(-4.9f, 1.62f, -4.6f),
+                new Vector3(-8f, 0.12f, -3.1f), new Vector3(-2.7f, 0.12f, -5.8f),
+                new Vector3(0.2f, 1.62f, -4.8f), new Vector3(3.5f, 1.62f, -4.9f),
+                new Vector3(6.7f, 1.62f, -4.7f), new Vector3(8f, 0.12f, -5.8f)
+            };
+            for (var index = 0; index < foodPositions.Length; index++)
+            {
+                var markerObject = new GameObject($"Food_{index + 1:00}_{(FoodRiskLevel)(index / 6)}");
+                markerObject.transform.SetParent(food, false);
+                markerObject.transform.position = foodPositions[index];
+                markerObject.AddComponent<FoodSpawnMarker>().Configure(index, (FoodRiskLevel)(index / 6));
+            }
+
+            var safety = NewGroup(layout.transform, "06_Recovery_And_Safety");
+            var recoveryPoint = new GameObject("Recovery_Point").transform;
+            recoveryPoint.SetParent(safety, false);
+            recoveryPoint.position = Vector3.up * 0.1f;
+            var recovery = new GameObject("Out_Of_Bounds_Recovery", typeof(BoxCollider), typeof(KitchenRecoveryVolume));
+            recovery.transform.SetParent(safety, false);
+            recovery.transform.position = new Vector3(0f, -2f, 0f);
+            recovery.transform.localScale = new Vector3(22f, 1.5f, 18f);
+            recovery.GetComponent<KitchenRecoveryVolume>().Configure(recoveryPoint);
+
+            var clutter = NewGroup(layout.transform, "07_Non_Blocking_Clutter");
+            CreateClutter(clutter, "Huge_Mug", PrimitiveType.Cylinder, new Vector3(-0.4f, 1.75f, -4.8f),
+                new Vector3(0.7f, 0.5f, 0.7f), routeMaterial);
+            CreateClutter(clutter, "Fruit_Bowl", PrimitiveType.Sphere, new Vector3(4.7f, 1.63f, -4.7f),
+                new Vector3(1.2f, 0.35f, 1.2f), nestMaterial);
+
+            var camera = UnityEngine.Object.FindFirstObjectByType<Camera>();
+            if (camera != null)
+            {
+                camera.transform.SetPositionAndRotation(new Vector3(0f, 12.5f, -15.5f), Quaternion.Euler(33f, 0f, 0f));
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+        }
+
+        private static Transform NewGroup(Transform parent, string name)
+        {
+            var group = new GameObject(name).transform;
+            group.SetParent(parent, false);
+            return group;
+        }
+
+        private static GameObject CreateBlock(Transform parent, string name, Vector3 position, Vector3 scale,
+            Material material)
+        {
+            var block = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            block.name = name;
+            block.transform.SetParent(parent, false);
+            block.transform.position = position;
+            block.transform.localScale = scale;
+            block.GetComponent<Renderer>().sharedMaterial = material;
+            return block;
+        }
+
+        private static void CreateRamp(Transform parent, string name, Vector3 position, float xRotation,
+            Vector3 scale, Material material)
+        {
+            var ramp = CreateBlock(parent, name, position, scale, material);
+            ramp.transform.rotation = Quaternion.Euler(xRotation, 0f, 0f);
+        }
+
+        private static void CreateSpawn(Transform parent, string name, LobbySeat seat, Vector3 position, float yaw)
+        {
+            var marker = new GameObject(name, typeof(KitchenSpawnMarker));
+            marker.transform.SetParent(parent, false);
+            marker.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
+            marker.GetComponent<KitchenSpawnMarker>().Configure(seat);
+        }
+
+        private static void CreateClutter(Transform parent, string name, PrimitiveType type, Vector3 position,
+            Vector3 scale, Material material)
+        {
+            var clutter = GameObject.CreatePrimitive(type);
+            clutter.name = name;
+            clutter.transform.SetParent(parent, false);
+            clutter.transform.position = position;
+            clutter.transform.localScale = scale;
+            clutter.GetComponent<Renderer>().sharedMaterial = material;
+            UnityEngine.Object.DestroyImmediate(clutter.GetComponent<Collider>());
+        }
+
+        private static Material GetGreyboxMaterial(string name, Color color)
+        {
+            var path = $"{Root}/Art/Materials/Greybox_{name}.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material != null) return material;
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            material = new Material(shader) { name = $"Greybox_{name}", color = color };
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
+            AssetDatabase.CreateAsset(material, path);
+            return material;
         }
     }
 }
