@@ -214,7 +214,7 @@ namespace CockroachFantasia.Networking
 
                 if (arguments.Contains("-swatterSmoke"))
                 {
-                    await RunSwatterSmokeAsync(requestedSeat);
+                    await RunSwatterSmokeAsync(requestedSeat, arguments.Contains("-respawnSmoke"));
                 }
 
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
@@ -235,7 +235,7 @@ namespace CockroachFantasia.Networking
             }
         }
 
-        private static async Task RunSwatterSmokeAsync(LobbySeat requestedSeat)
+        private static async Task RunSwatterSmokeAsync(LobbySeat requestedSeat, bool verifyRespawn)
         {
             await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
                                        NetworkGameManager.Instance.AcceptsGameplayRequests &&
@@ -246,7 +246,8 @@ namespace CockroachFantasia.Networking
             if (attack == null) throw new InvalidOperationException("Human swatter component is missing.");
             var startedAt = NetworkGameManager.Instance.PlayingEndTimestamp -
                             NetworkGameManager.Instance.Rules.MatchDurationSeconds;
-            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >= startedAt + 0.75d,
+            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >=
+                                       startedAt + (verifyRespawn ? 1.2d : 0.75d),
                 TimeSpan.FromSeconds(5), "swatter test time");
             if (requestedSeat == LobbySeat.Human)
                 attack.RequestSwingForDiagnostics();
@@ -256,12 +257,46 @@ namespace CockroachFantasia.Networking
                 throw new InvalidOperationException($"Expected 3 host-computed hits, got {attack.LastConfirmedHitCount}.");
             Debug.Log("SWATTER_DIAGNOSTIC sequence=1 hits=3 reach=1.8 windup=0.25 cooldown=1.1");
 
-            if (requestedSeat == LobbySeat.Human)
-                attack.RequestSwingForDiagnostics();
-            await Task.Delay(500);
-            if (attack.ConfirmedImpactSequence != 1)
-                throw new InvalidOperationException("Server cooldown accepted a second immediate swat.");
-            Debug.Log("SWATTER_COOLDOWN_DIAGNOSTIC rejectedImmediateRepeat=true");
+            if (verifyRespawn)
+            {
+                await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<CockroachRespawn>(
+                        FindObjectsSortMode.None).Count(respawn => respawn.IsRespawning) == 3,
+                    TimeSpan.FromSeconds(3), "three replicated knockouts");
+                var knockedOut = UnityEngine.Object.FindObjectsByType<CockroachRespawn>(FindObjectsSortMode.None);
+                var earliest = knockedOut.Min(respawn => respawn.RespawnEndTimestamp);
+                var latest = knockedOut.Max(respawn => respawn.RespawnEndTimestamp);
+                var foods = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+                if (latest - earliest > 0.1d || foods.Length != 9 ||
+                    foods.Any(food => food.Lifecycle != FoodLifecycleState.World) ||
+                    foods.Sum(food => food.Definition.Points) != FoodConfigurationValidator.RequiredAvailablePoints ||
+                    knockedOut.Any(respawn => respawn.GetComponent<CharacterController>().enabled ||
+                                              respawn.GetComponent<CockroachMotor>().CanAcceptInput))
+                    throw new InvalidOperationException("Knockout state or cargo recovery disagreed.");
+                Debug.Log($"RESPAWN_DIAGNOSTIC phase=knockedOut players=3 cargoWorld=9 " +
+                          $"deadline={latest:F3} remaining={knockedOut[0].RemainingRespawnSeconds:F2}");
+
+                await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<CockroachRespawn>(
+                        FindObjectsSortMode.None).All(respawn => !respawn.IsRespawning),
+                    TimeSpan.FromSeconds(6), "safe nest respawn");
+                var restored = UnityEngine.Object.FindObjectsByType<CockroachRespawn>(FindObjectsSortMode.None);
+                if (restored.Any(respawn => !respawn.GetComponent<CharacterController>().enabled ||
+                                            !respawn.GetComponent<CockroachMotor>().CanAcceptInput) ||
+                    restored.Select(respawn => respawn.transform.position)
+                        .Any(position => position.x < -8f || position.x > -5.5f ||
+                                         position.z < 5.2f || position.z > 6.1f))
+                    throw new InvalidOperationException("A Cockroach was not restored at a safe nest spawn.");
+                Debug.Log("RESPAWN_DIAGNOSTIC phase=restored players=3 collision=true input=true");
+            }
+
+            if (!verifyRespawn)
+            {
+                if (requestedSeat == LobbySeat.Human)
+                    attack.RequestSwingForDiagnostics();
+                await Task.Delay(500);
+                if (attack.ConfirmedImpactSequence != 1)
+                    throw new InvalidOperationException("Server cooldown accepted a second immediate swat.");
+                Debug.Log("SWATTER_COOLDOWN_DIAGNOSTIC rejectedImmediateRepeat=true");
+            }
         }
 
         private static async Task RunFoodCarrySmokeAsync(LobbySeat requestedSeat, bool deposit)

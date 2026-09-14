@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using CockroachFantasia.Characters;
+using CockroachFantasia.Food;
 using CockroachFantasia.Networking;
 using Unity.Netcode;
 using UnityEngine;
@@ -87,6 +88,15 @@ namespace CockroachFantasia.Gameplay
             {
                 var diagnosticTargets = UnityEngine.Object.FindObjectsByType<CockroachMotor>(
                     FindObjectsSortMode.None).OrderBy(target => target.OwnerClientId).ToArray();
+                if (Environment.GetCommandLineArgs().Contains("-respawnSmoke"))
+                {
+                    var cargo = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None)
+                        .Where(food => food.Lifecycle == FoodLifecycleState.World)
+                        .OrderBy(food => food.NetworkObjectId).Skip(1).First();
+                    if (!diagnosticTargets[0].GetComponent<CockroachFoodCarrier>()
+                            .PreparePickupForRespawnDiagnosticsByServer(cargo))
+                        throw new InvalidOperationException("Could not stage carried cargo for respawn diagnostic.");
+                }
                 for (var index = 0; index < diagnosticTargets.Length; index++)
                     diagnosticTargets[index].RecoverTo(origin + direction * (0.55f + 0.35f * index));
                 Physics.SyncTransforms();
@@ -102,6 +112,8 @@ namespace CockroachFantasia.Gameplay
                 .ToArray();
             if (targets.Length == 0) yield break;
 
+            foreach (var target in targets)
+                target.GetComponent<CockroachRespawn>()?.ApplyConfirmedHitByServer();
             ServerHitConfirmed?.Invoke(targets);
             var impact = targets.Aggregate(Vector3.zero, (sum, target) => sum + target.transform.position) /
                          targets.Length;

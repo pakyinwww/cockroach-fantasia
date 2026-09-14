@@ -361,6 +361,7 @@ namespace CockroachFantasia.Editor
             }
             cockroachPrefab = EnsurePlayerNetworking(CockroachPlayerPath, 3.2f);
             cockroachPrefab = EnsureCockroachFoodCarrier(CockroachPlayerPath);
+            cockroachPrefab = EnsureCockroachRespawn(CockroachPlayerPath);
 
             if (!prefabList.Contains(cockroachPrefab))
             {
@@ -549,6 +550,17 @@ namespace CockroachFantasia.Editor
                 paddle.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial("SwatterPaddle",
                     new Color(1f, 0.38f, 0.58f));
             }
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            PrefabUtility.UnloadPrefabContents(root);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        }
+
+        private static GameObject EnsureCockroachRespawn(string prefabPath)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (asset.GetComponent<CockroachRespawn>() != null) return asset;
+            var root = PrefabUtility.LoadPrefabContents(prefabPath);
+            root.AddComponent<CockroachRespawn>();
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             PrefabUtility.UnloadPrefabContents(root);
             return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);

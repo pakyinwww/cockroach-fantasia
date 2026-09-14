@@ -84,6 +84,15 @@ namespace CockroachFantasia.Food
             if (IsSpawned && IsOwner) RequestDropRpc();
         }
 
+        public bool PreparePickupForRespawnDiagnosticsByServer(FoodItem target)
+        {
+            if (!IsServer || !Debug.isDebugBuild ||
+                !Environment.GetCommandLineArgs().Contains("-respawnSmoke") || target == null) return false;
+            motor.RecoverTo(target.transform.position + Vector3.right * 0.25f);
+            TryPickupByServer(new NetworkObjectReference(target.NetworkObject), OwnerClientId);
+            return carriedFoodNetworkId.Value == target.NetworkObjectId;
+        }
+
         [Rpc(SendTo.Server)]
         private void RequestPickupRpc(NetworkObjectReference targetReference, RpcParams rpcParams = default)
         {
@@ -94,7 +103,9 @@ namespace CockroachFantasia.Food
         private void PreparePickupForDiagnosticsRpc(NetworkObjectReference targetReference,
             RpcParams rpcParams = default)
         {
-            if (!Debug.isDebugBuild || !Environment.GetCommandLineArgs().Contains("-foodCarrySmoke") ||
+            var arguments = Environment.GetCommandLineArgs();
+            if (!Debug.isDebugBuild ||
+                (!arguments.Contains("-foodCarrySmoke") && !arguments.Contains("-respawnSmoke")) ||
                 !targetReference.TryGet(out var targetObject))
                 return;
             motor.RecoverTo(targetObject.transform.position + Vector3.right * 0.25f);

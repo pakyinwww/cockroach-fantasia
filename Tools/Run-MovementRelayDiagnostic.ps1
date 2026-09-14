@@ -9,7 +9,8 @@ param(
     [switch]$FoodSpawn,
     [switch]$FoodCarry,
     [switch]$FoodDeposit,
-    [switch]$Swatter
+    [switch]$Swatter,
+    [switch]$Respawn
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,6 +29,7 @@ if ($FoodSpawn) { $common += ' -foodSpawnSmoke' }
 if ($FoodCarry) { $common += ' -foodCarrySmoke' }
 if ($FoodDeposit) { $common += ' -foodCarrySmoke -foodDepositSmoke' }
 if ($Swatter) { $common += ' -swatterSmoke' }
+if ($Respawn) { $common += ' -swatterSmoke -respawnSmoke' }
 $players = @(
     @{ Key = 'host'; Name = 'Human'; Seat = 'Human'; Extra = '-rosterHostSmoke -rosterStartMatch -rosterDurationSeconds 8' },
     @{ Key = 'c1'; Name = 'RoachA'; Seat = 'CockroachOne'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
@@ -83,6 +85,7 @@ $results = for ($index = 0; $index -lt $players.Count; $index++) {
         FoodCarry = (Select-String -Path $logPath -Pattern 'FOOD_CARRY_DIAGNOSTIC phase=dropped' | ForEach-Object Line) -join ''
         FoodDeposit = (Select-String -Path $logPath -Pattern 'FOOD_DEPOSIT_DIAGNOSTIC' | ForEach-Object Line) -join ''
         Swatter = (Select-String -Path $logPath -Pattern 'SWATTER_DIAGNOSTIC' | ForEach-Object Line) -join ''
+        Respawn = (Select-String -Path $logPath -Pattern 'RESPAWN_DIAGNOSTIC phase=restored' | ForEach-Object Line) -join ''
     }
 }
 
@@ -94,7 +97,8 @@ if ($processes.Where({ $_.ExitCode -ne 0 }).Count -gt 0 -or
     ($FoodSpawn -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodSpawn) }).Count -gt 0) -or
     ($FoodCarry -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodCarry) }).Count -gt 0) -or
     ($FoodDeposit -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodDeposit) }).Count -gt 0) -or
-    ($Swatter -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Swatter) }).Count -gt 0)) {
+    ($Swatter -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Swatter) }).Count -gt 0) -or
+    ($Respawn -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Respawn) }).Count -gt 0)) {
     throw "Movement diagnostic failed. Inspect $outputDirectory."
 }
 

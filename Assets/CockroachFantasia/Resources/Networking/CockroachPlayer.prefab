@@ -137,6 +137,7 @@ GameObject:
   - component: {fileID: 8481127718102400844}
   - component: {fileID: 5137720714789260982}
   - component: {fileID: 7275039324093823133}
+  - component: {fileID: 6791955048435552983}
   m_Layer: 0
   m_Name: CockroachPlayer
   m_TagString: Untagged
@@ -330,6 +331,19 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   pickupRadius: 0.75
   dropRayDistance: 3
+--- !u!114 &6791955048435552983
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3465778405897972211}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f46fb8dc702a448d91f331e5ad40b92d, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.Gameplay.CockroachRespawn
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!1 &4357684328050889209
 GameObject:
   m_ObjectHideFlags: 0

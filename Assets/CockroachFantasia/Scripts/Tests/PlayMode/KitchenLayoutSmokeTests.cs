@@ -60,6 +60,7 @@ namespace CockroachFantasia.Tests.PlayMode
             var cockroachPrefab = Resources.Load<GameObject>("Networking/CockroachPlayer");
             var humanPrefab = Resources.Load<GameObject>("Networking/HumanPlayer");
             Assert.That(cockroachPrefab.GetComponent<CockroachFoodCarrier>(), Is.Not.Null);
+            Assert.That(cockroachPrefab.GetComponent<CockroachRespawn>(), Is.Not.Null);
             Assert.That(humanPrefab.GetComponent<CockroachFoodCarrier>(), Is.Null);
             Assert.That(humanPrefab.GetComponent<SwatterAttack>(), Is.Not.Null);
             Assert.That(cockroachPrefab.GetComponent<SwatterAttack>(), Is.Null);
