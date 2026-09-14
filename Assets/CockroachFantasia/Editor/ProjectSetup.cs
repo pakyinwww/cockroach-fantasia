@@ -262,10 +262,10 @@ namespace CockroachFantasia.Editor
 
         private static void CreateLobbyInterface(Scene scene)
         {
-            if (GameObject.Find("LobbyCanvas") != null)
-            {
-                return;
-            }
+            var existingCanvas = GameObject.Find("LobbyCanvas");
+            if (existingCanvas != null) UnityEngine.Object.DestroyImmediate(existingCanvas);
+            var existingEventSystem = GameObject.Find("EventSystem");
+            if (existingEventSystem != null) UnityEngine.Object.DestroyImmediate(existingEventSystem);
 
             var canvasObject = new GameObject("LobbyCanvas", typeof(RectTransform), typeof(Canvas),
                 typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -293,9 +293,28 @@ namespace CockroachFantasia.Editor
                 labels[index].text = seatNames[index] + "\nOpen";
             }
 
-            var status = CreateText(canvasObject.transform, "Status", "Pick a free seat.", 28,
-                new Vector2(0.5f, 0.22f), new Vector2(1000f, 70f));
-            canvasObject.AddComponent<LobbyRosterPresenter>().Configure(buttons, labels, nameInput, status);
+            var ready = CreateButton(canvasObject.transform, "Ready", new Vector2(0.38f, 0.22f),
+                new Vector2(340f, 82f), out var readyLabel);
+            readyLabel.text = "READY UP";
+            var start = CreateButton(canvasObject.transform, "Start", new Vector2(0.62f, 0.22f),
+                new Vector2(340f, 82f), out var startLabel);
+            startLabel.text = "START MATCH";
+            var status = CreateText(canvasObject.transform, "Status", "Pick a free seat.", 25,
+                new Vector2(0.5f, 0.11f), new Vector2(1200f, 64f));
+
+            var loadingPanel = new GameObject("LoadingPanel", typeof(RectTransform), typeof(Image));
+            loadingPanel.transform.SetParent(canvasObject.transform, false);
+            var loadingRect = loadingPanel.GetComponent<RectTransform>();
+            loadingRect.anchorMin = Vector2.zero;
+            loadingRect.anchorMax = Vector2.one;
+            loadingRect.offsetMin = loadingRect.offsetMax = Vector2.zero;
+            loadingPanel.GetComponent<Image>().color = new Color(0.08f, 0.035f, 0.025f, 0.94f);
+            CreateText(loadingPanel.transform, "LoadingText", "LOADING KITCHEN…", 52,
+                new Vector2(0.5f, 0.5f), new Vector2(900f, 120f));
+            loadingPanel.SetActive(false);
+
+            canvasObject.AddComponent<LobbyRosterPresenter>().Configure(buttons, labels, nameInput, status,
+                ready, readyLabel, start, loadingPanel);
 
             var eventSystemObject = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
             SceneManager.MoveGameObjectToScene(eventSystemObject, scene);

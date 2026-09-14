@@ -65,5 +65,30 @@ namespace CockroachFantasia.Networking
 
             return connected == requiredPlayers && humans == 1 && cockroaches == 3;
         }
+
+        public static bool CanStartMatch(IEnumerable<RosterEntry> entries, bool rosterLocked, out string rejection)
+        {
+            if (rosterLocked)
+            {
+                rejection = "The lobby is already loading.";
+                return false;
+            }
+
+            var snapshot = new List<RosterEntry>(entries);
+            if (!HasValidRoleDistribution(snapshot))
+            {
+                rejection = "Fill exactly one Human and three Cockroach seats first.";
+                return false;
+            }
+
+            if (snapshot.Exists(entry => entry.Connected && !entry.Ready))
+            {
+                rejection = "Every player must be ready.";
+                return false;
+            }
+
+            rejection = string.Empty;
+            return true;
+        }
     }
 }

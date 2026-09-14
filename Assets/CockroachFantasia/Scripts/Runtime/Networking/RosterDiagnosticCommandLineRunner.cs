@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace CockroachFantasia.Networking
 {
@@ -110,6 +111,60 @@ namespace CockroachFantasia.Networking
                     .Select(entry => $"{entry.ClientId}:{entry.DisplayName}:{entry.Seat}:{entry.Ready}:{entry.Connected}"));
                 Debug.Log($"ROSTER_DIAGNOSTIC_SNAPSHOT {snapshot}");
 
+                if (arguments.Contains("-rosterAttemptStartRejected"))
+                {
+                    var rejection = await RequestLobbyActionAsync(roster, roster.RequestStartMatch);
+                    if (rejection.Accepted)
+                        throw new InvalidOperationException("An unauthorized or invalid match start was accepted.");
+                    Debug.Log($"ROSTER_START_REJECTED {rejection.Message}");
+                }
+
+                if (arguments.Contains("-rosterReady"))
+                {
+                    var readyResult = await RequestLobbyActionAsync(roster, () => roster.SetLocalReady(true));
+                    if (!readyResult.Accepted)
+                        throw new InvalidOperationException("Ready request was rejected: " + readyResult.Message);
+                    await WaitUntilAsync(() => roster.TryGetEntry(localId, out var entry) && entry.Ready,
+                        TimeSpan.FromSeconds(15), "ready replication");
+                }
+
+                var expectKitchen = arguments.Contains("-rosterExpectKitchen");
+                if (arguments.Contains("-rosterStartMatch"))
+                {
+                    await WaitUntilAsync(() => roster.CanLocalHostStart, TimeSpan.FromSeconds(30), "start gate");
+                    roster.RequestStartMatch();
+                    expectKitchen = true;
+                }
+
+                if (arguments.Contains("-rosterDisconnectOnLoading"))
+                {
+                    await WaitUntilAsync(() => roster.IsLoading, TimeSpan.FromSeconds(30), "loading state");
+                    await coordinator.LeaveAsync();
+                    Debug.Log("ROSTER_LOADING_DISCONNECT_SUCCESS");
+                    Application.Quit(0);
+                    return;
+                }
+
+                if (arguments.Contains("-rosterExpectLoadingAbort"))
+                {
+                    await WaitUntilAsync(() => roster.IsLoading, TimeSpan.FromSeconds(30), "loading state");
+                    await WaitUntilAsync(() => !roster.IsLoading && roster.Entries.Count == expectedPlayers - 1,
+                        TimeSpan.FromSeconds(30), "loading abort and disconnect cleanup");
+                    if (SceneManager.GetActiveScene().name == "Kitchen")
+                        throw new InvalidOperationException("A partial match started after a loading disconnect.");
+                    Debug.Log("ROSTER_LOADING_ABORT_SUCCESS");
+                    expectKitchen = false;
+                }
+
+                if (expectKitchen)
+                {
+                    await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "Kitchen",
+                        TimeSpan.FromSeconds(60), "synchronized Kitchen load");
+                    if (!roster.TryGetEntry(localId, out var preserved) || preserved.Seat != requestedSeat)
+                        throw new InvalidOperationException("Assigned role was not preserved into Kitchen.");
+                    Debug.Log($"ROSTER_KITCHEN_SUCCESS client={localId} seat={preserved.Seat}");
+                }
+
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
                 while (Time.realtimeSinceStartupAsDouble < end)
                 {
@@ -167,6 +222,24 @@ namespace CockroachFantasia.Networking
             }
 
             throw new TimeoutException("Timed out waiting for " + operation + ".");
+        }
+
+        private static async Task<(bool Accepted, string Message)> RequestLobbyActionAsync(
+            NetworkRoster roster, Action request)
+        {
+            bool? accepted = null;
+            var message = string.Empty;
+            void OnResolved(bool value, string response)
+            {
+                accepted = value;
+                message = response;
+            }
+
+            roster.LocalLobbyActionResolved += OnResolved;
+            request();
+            await WaitUntilAsync(() => accepted.HasValue, TimeSpan.FromSeconds(15), "lobby action response");
+            roster.LocalLobbyActionResolved -= OnResolved;
+            return (accepted == true, message);
         }
 
         private static string RequireArgument(string[] arguments, string key)
