@@ -3,6 +3,7 @@ using System.Linq;
 using CockroachFantasia.Food;
 using CockroachFantasia.Gameplay;
 using CockroachFantasia.Networking;
+using CockroachFantasia.UI;
 using CockroachFantasia.World;
 using NUnit.Framework;
 using UnityEngine;
@@ -65,6 +66,12 @@ namespace CockroachFantasia.Tests.PlayMode
             Assert.That(humanPrefab.GetComponent<SwatterAttack>(), Is.Not.Null);
             Assert.That(cockroachPrefab.GetComponent<SwatterAttack>(), Is.Null);
             Assert.That(humanPrefab.transform.Find("ViewPivot/SwatterSocket/SwatterVisual"), Is.Not.Null);
+            var matchHud = Object.FindFirstObjectByType<MatchHudPresenter>();
+            Assert.That(matchHud, Is.Not.Null);
+            Assert.That(GameObject.Find("Timer"), Is.Not.Null);
+            Assert.That(GameObject.Find("Score"), Is.Not.Null);
+            Assert.That(matchHud.transform.Find("CockroachHud"), Is.Not.Null);
+            Assert.That(matchHud.transform.Find("HumanHud"), Is.Not.Null);
             Assert.That(GameObject.Find("Huge_Mug").GetComponent<Collider>(), Is.Null);
             Assert.That(GameObject.Find("Fruit_Bowl").GetComponent<Collider>(), Is.Null);
 

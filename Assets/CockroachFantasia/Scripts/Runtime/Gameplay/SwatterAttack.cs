@@ -22,10 +22,13 @@ namespace CockroachFantasia.Gameplay
         private NetworkRoleAvatar identity;
         private double lastAcceptedServerTime = double.NegativeInfinity;
         private float localSwingStartedAt = float.NegativeInfinity;
+        private float localCooldownEndsAt = float.NegativeInfinity;
         private Quaternion socketRestRotation;
 
         public uint ConfirmedImpactSequence { get; private set; }
         public int LastConfirmedHitCount { get; private set; }
+        public float LocalCooldownRemaining => Mathf.Max(0f, localCooldownEndsAt - Time.unscaledTime);
+        public bool IsLocallyReady => LocalCooldownRemaining <= 0f;
         public event Action<IReadOnlyList<CockroachMotor>> ServerHitConfirmed;
 
         private void Awake()
@@ -49,8 +52,9 @@ namespace CockroachFantasia.Gameplay
 
         public void RequestSwing()
         {
-            if (!IsSpawned || !IsOwner || !motor.CanAcceptInput) return;
+            if (!IsSpawned || !IsOwner || !motor.CanAcceptInput || !IsLocallyReady) return;
             BeginLocalSwingPresentation();
+            localCooldownEndsAt = Time.unscaledTime + (float)SwatterAttackRules.CooldownSeconds;
             RequestSwingRpc();
         }
 
@@ -58,6 +62,7 @@ namespace CockroachFantasia.Gameplay
         {
             if (!IsSpawned || !IsOwner || !Debug.isDebugBuild) return;
             BeginLocalSwingPresentation();
+            localCooldownEndsAt = Time.unscaledTime + (float)SwatterAttackRules.CooldownSeconds;
             RequestSwingRpc();
         }
 

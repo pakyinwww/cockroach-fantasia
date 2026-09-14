@@ -262,6 +262,7 @@ namespace CockroachFantasia.Editor
                     foodSpawner.Configure(AssetDatabase.LoadAssetAtPath<FoodSpawnSet>(FoodSpawnSetPath));
                     EditorUtility.SetDirty(foodSpawner);
                     CreateKitchenLayout(scene);
+                    CreateKitchenHud(scene);
                 }
 
                 if (!sceneAlreadyExists || scene.isDirty)
@@ -671,6 +672,58 @@ namespace CockroachFantasia.Editor
             text.alignment = TextAnchor.MiddleCenter;
             text.color = new Color(1f, 0.95f, 0.85f);
             return text;
+        }
+
+        private static void CreateKitchenHud(Scene scene)
+        {
+            var existing = GameObject.Find("MatchHudCanvas");
+            if (existing != null && existing.GetComponent<MatchHudPresenter>() != null) return;
+            if (existing != null) UnityEngine.Object.DestroyImmediate(existing);
+
+            var canvasObject = new GameObject("MatchHudCanvas", typeof(RectTransform), typeof(Canvas),
+                typeof(CanvasScaler), typeof(GraphicRaycaster));
+            SceneManager.MoveGameObjectToScene(canvasObject, scene);
+            canvasObject.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+
+            var timer = CreateText(canvasObject.transform, "Timer", "4:00", 46,
+                new Vector2(0.5f, 0.95f), new Vector2(240f, 70f));
+            var score = CreateText(canvasObject.transform, "Score", "FOOD  0 / 12", 34,
+                new Vector2(0.82f, 0.95f), new Vector2(360f, 64f));
+            var announcement = CreateText(canvasObject.transform, "Announcement", string.Empty, 42,
+                new Vector2(0.5f, 0.82f), new Vector2(760f, 80f));
+
+            var roachPanel = CreateFullScreenPanel(canvasObject.transform, "CockroachHud");
+            var carry = CreateText(roachPanel.transform, "Carry", "CARRY  EMPTY  •  SPEED 100%", 28,
+                new Vector2(0.5f, 0.11f), new Vector2(720f, 54f));
+            var prompt = CreateText(roachPanel.transform, "InteractPrompt", "E  PICK UP NEARBY FOOD", 25,
+                new Vector2(0.5f, 0.055f), new Vector2(620f, 48f));
+            var respawn = CreateText(roachPanel.transform, "RespawnCountdown", string.Empty, 44,
+                new Vector2(0.5f, 0.5f), new Vector2(520f, 90f));
+
+            var humanPanel = CreateFullScreenPanel(canvasObject.transform, "HumanHud");
+            var reticle = CreateText(humanPanel.transform, "Reticle", "+", 36,
+                new Vector2(0.5f, 0.5f), new Vector2(70f, 70f));
+            var swatter = CreateText(humanPanel.transform, "SwatterReadiness", "SWATTER READY", 28,
+                new Vector2(0.83f, 0.08f), new Vector2(360f, 54f));
+
+            canvasObject.AddComponent<MatchHudPresenter>().Configure(timer, score, announcement, roachPanel,
+                carry, prompt, respawn, humanPanel, reticle, swatter);
+        }
+
+        private static GameObject CreateFullScreenPanel(Transform parent, string name)
+        {
+            var panel = new GameObject(name, typeof(RectTransform));
+            panel.transform.SetParent(parent, false);
+            var rect = panel.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            return panel;
         }
 
         private static Button CreateButton(Transform parent, string name, Vector2 anchor, Vector2 size,

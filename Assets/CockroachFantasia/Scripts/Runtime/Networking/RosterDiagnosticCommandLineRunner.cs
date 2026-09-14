@@ -217,6 +217,11 @@ namespace CockroachFantasia.Networking
                     await RunSwatterSmokeAsync(requestedSeat, arguments.Contains("-respawnSmoke"));
                 }
 
+                if (arguments.Contains("-hudSmoke"))
+                {
+                    await RunHudSmokeAsync(requestedSeat);
+                }
+
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
                 while (Time.realtimeSinceStartupAsDouble < end)
                 {
@@ -233,6 +238,39 @@ namespace CockroachFantasia.Networking
                 Debug.LogError("ROSTER_DIAGNOSTIC_FAILED");
                 Application.Quit(5);
             }
+        }
+
+        private static async Task RunHudSmokeAsync(LobbySeat requestedSeat)
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.AcceptsGameplayRequests &&
+                                       UnityEngine.Object.FindFirstObjectByType<CockroachFantasia.UI.MatchHudPresenter>() != null,
+                TimeSpan.FromSeconds(15), "role HUD");
+            await Task.Delay(100);
+            var hud = UnityEngine.Object.FindFirstObjectByType<CockroachFantasia.UI.MatchHudPresenter>();
+            var timer = hud.transform.Find("Timer").GetComponent<UnityEngine.UI.Text>().text;
+            var score = hud.transform.Find("Score").GetComponent<UnityEngine.UI.Text>().text;
+            var roachPanel = hud.transform.Find("CockroachHud").gameObject;
+            var humanPanel = hud.transform.Find("HumanHud").gameObject;
+            if (!timer.Contains(":") || !score.Contains("/ 12"))
+                throw new InvalidOperationException($"Shared HUD is incomplete: timer={timer}, score={score}.");
+            if (requestedSeat == LobbySeat.Human)
+            {
+                var reticle = humanPanel.transform.Find("Reticle").GetComponent<UnityEngine.UI.Text>().text;
+                var swatter = humanPanel.transform.Find("SwatterReadiness").GetComponent<UnityEngine.UI.Text>().text;
+                if (!humanPanel.activeSelf || roachPanel.activeSelf || reticle != "+" || !swatter.Contains("SWATTER"))
+                    throw new InvalidOperationException("Human HUD role state is incorrect.");
+            }
+            else
+            {
+                var carry = roachPanel.transform.Find("Carry").GetComponent<UnityEngine.UI.Text>().text;
+                var prompt = roachPanel.transform.Find("InteractPrompt").GetComponent<UnityEngine.UI.Text>().text;
+                if (!roachPanel.activeSelf || humanPanel.activeSelf || !carry.Contains("SPEED 100%") ||
+                    !prompt.Contains("E  PICK UP"))
+                    throw new InvalidOperationException("Cockroach HUD role state is incorrect.");
+            }
+            Debug.Log($"HUD_DIAGNOSTIC role={requestedSeat} timer={timer} score={score} " +
+                      $"roachPanel={roachPanel.activeSelf} humanPanel={humanPanel.activeSelf}");
         }
 
         private static async Task RunSwatterSmokeAsync(LobbySeat requestedSeat, bool verifyRespawn)

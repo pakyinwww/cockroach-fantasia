@@ -10,7 +10,8 @@ param(
     [switch]$FoodCarry,
     [switch]$FoodDeposit,
     [switch]$Swatter,
-    [switch]$Respawn
+    [switch]$Respawn,
+    [switch]$Hud
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,6 +31,7 @@ if ($FoodCarry) { $common += ' -foodCarrySmoke' }
 if ($FoodDeposit) { $common += ' -foodCarrySmoke -foodDepositSmoke' }
 if ($Swatter) { $common += ' -swatterSmoke' }
 if ($Respawn) { $common += ' -swatterSmoke -respawnSmoke' }
+if ($Hud) { $common += ' -hudSmoke' }
 $players = @(
     @{ Key = 'host'; Name = 'Human'; Seat = 'Human'; Extra = '-rosterHostSmoke -rosterStartMatch -rosterDurationSeconds 8' },
     @{ Key = 'c1'; Name = 'RoachA'; Seat = 'CockroachOne'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
@@ -86,6 +88,7 @@ $results = for ($index = 0; $index -lt $players.Count; $index++) {
         FoodDeposit = (Select-String -Path $logPath -Pattern 'FOOD_DEPOSIT_DIAGNOSTIC' | ForEach-Object Line) -join ''
         Swatter = (Select-String -Path $logPath -Pattern 'SWATTER_DIAGNOSTIC' | ForEach-Object Line) -join ''
         Respawn = (Select-String -Path $logPath -Pattern 'RESPAWN_DIAGNOSTIC phase=restored' | ForEach-Object Line) -join ''
+        Hud = (Select-String -Path $logPath -Pattern 'HUD_DIAGNOSTIC' | ForEach-Object Line) -join ''
     }
 }
 
@@ -98,7 +101,8 @@ if ($processes.Where({ $_.ExitCode -ne 0 }).Count -gt 0 -or
     ($FoodCarry -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodCarry) }).Count -gt 0) -or
     ($FoodDeposit -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodDeposit) }).Count -gt 0) -or
     ($Swatter -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Swatter) }).Count -gt 0) -or
-    ($Respawn -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Respawn) }).Count -gt 0)) {
+    ($Respawn -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Respawn) }).Count -gt 0) -or
+    ($Hud -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Hud) }).Count -gt 0)) {
     throw "Movement diagnostic failed. Inspect $outputDirectory."
 }
 
