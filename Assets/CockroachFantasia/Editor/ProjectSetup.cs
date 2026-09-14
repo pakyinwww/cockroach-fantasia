@@ -411,6 +411,7 @@ namespace CockroachFantasia.Editor
                 UnityEngine.Object.DestroyImmediate(human);
             }
             humanPrefab = EnsurePlayerNetworking(HumanPlayerPath, 4.5f);
+            humanPrefab = EnsureHumanSwatter(HumanPlayerPath);
 
             if (!prefabList.Contains(humanPrefab))
             {
@@ -512,6 +513,42 @@ namespace CockroachFantasia.Editor
             if (asset.GetComponent<CockroachFoodCarrier>() != null) return asset;
             var root = PrefabUtility.LoadPrefabContents(prefabPath);
             root.AddComponent<CockroachFoodCarrier>();
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            PrefabUtility.UnloadPrefabContents(root);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        }
+
+        private static GameObject EnsureHumanSwatter(string prefabPath)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (asset.GetComponent<SwatterAttack>() != null &&
+                asset.transform.Find("ViewPivot/SwatterSocket/SwatterVisual") != null) return asset;
+
+            var root = PrefabUtility.LoadPrefabContents(prefabPath);
+            if (root.GetComponent<SwatterAttack>() == null) root.AddComponent<SwatterAttack>();
+            var socket = root.GetComponent<HumanMotor>().SwatterSocket;
+            if (socket.Find("SwatterVisual") == null)
+            {
+                var visual = new GameObject("SwatterVisual").transform;
+                visual.SetParent(socket, false);
+                var handle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                handle.name = "Handle";
+                handle.transform.SetParent(visual, false);
+                handle.transform.localPosition = new Vector3(0f, 0f, 0.22f);
+                handle.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                handle.transform.localScale = new Vector3(0.025f, 0.28f, 0.025f);
+                UnityEngine.Object.DestroyImmediate(handle.GetComponent<Collider>());
+                handle.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial("SwatterHandle",
+                    new Color(0.28f, 0.72f, 0.9f));
+                var paddle = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                paddle.name = "Paddle";
+                paddle.transform.SetParent(visual, false);
+                paddle.transform.localPosition = new Vector3(0f, 0f, 0.62f);
+                paddle.transform.localScale = new Vector3(0.38f, 0.055f, 0.42f);
+                UnityEngine.Object.DestroyImmediate(paddle.GetComponent<Collider>());
+                paddle.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial("SwatterPaddle",
+                    new Color(1f, 0.38f, 0.58f));
+            }
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             PrefabUtility.UnloadPrefabContents(root);
             return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);

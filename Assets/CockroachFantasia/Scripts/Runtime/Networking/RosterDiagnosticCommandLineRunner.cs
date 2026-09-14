@@ -212,6 +212,11 @@ namespace CockroachFantasia.Networking
                     await RunFoodCarrySmokeAsync(requestedSeat, arguments.Contains("-foodDepositSmoke"));
                 }
 
+                if (arguments.Contains("-swatterSmoke"))
+                {
+                    await RunSwatterSmokeAsync(requestedSeat);
+                }
+
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
                 while (Time.realtimeSinceStartupAsDouble < end)
                 {
@@ -228,6 +233,35 @@ namespace CockroachFantasia.Networking
                 Debug.LogError("ROSTER_DIAGNOSTIC_FAILED");
                 Application.Quit(5);
             }
+        }
+
+        private static async Task RunSwatterSmokeAsync(LobbySeat requestedSeat)
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.AcceptsGameplayRequests &&
+                                       UnityEngine.Object.FindObjectsByType<CockroachMotor>(
+                                           FindObjectsSortMode.None).Length == 3,
+                TimeSpan.FromSeconds(20), "swatter prerequisites");
+            var attack = UnityEngine.Object.FindFirstObjectByType<SwatterAttack>();
+            if (attack == null) throw new InvalidOperationException("Human swatter component is missing.");
+            var startedAt = NetworkGameManager.Instance.PlayingEndTimestamp -
+                            NetworkGameManager.Instance.Rules.MatchDurationSeconds;
+            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >= startedAt + 0.75d,
+                TimeSpan.FromSeconds(5), "swatter test time");
+            if (requestedSeat == LobbySeat.Human)
+                attack.RequestSwingForDiagnostics();
+            await WaitUntilAsync(() => attack.ConfirmedImpactSequence == 1,
+                TimeSpan.FromSeconds(5), "confirmed swatter impact");
+            if (attack.LastConfirmedHitCount != 3)
+                throw new InvalidOperationException($"Expected 3 host-computed hits, got {attack.LastConfirmedHitCount}.");
+            Debug.Log("SWATTER_DIAGNOSTIC sequence=1 hits=3 reach=1.8 windup=0.25 cooldown=1.1");
+
+            if (requestedSeat == LobbySeat.Human)
+                attack.RequestSwingForDiagnostics();
+            await Task.Delay(500);
+            if (attack.ConfirmedImpactSequence != 1)
+                throw new InvalidOperationException("Server cooldown accepted a second immediate swat.");
+            Debug.Log("SWATTER_COOLDOWN_DIAGNOSTIC rejectedImmediateRepeat=true");
         }
 
         private static async Task RunFoodCarrySmokeAsync(LobbySeat requestedSeat, bool deposit)

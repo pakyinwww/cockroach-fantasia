@@ -61,6 +61,9 @@ namespace CockroachFantasia.Tests.PlayMode
             var humanPrefab = Resources.Load<GameObject>("Networking/HumanPlayer");
             Assert.That(cockroachPrefab.GetComponent<CockroachFoodCarrier>(), Is.Not.Null);
             Assert.That(humanPrefab.GetComponent<CockroachFoodCarrier>(), Is.Null);
+            Assert.That(humanPrefab.GetComponent<SwatterAttack>(), Is.Not.Null);
+            Assert.That(cockroachPrefab.GetComponent<SwatterAttack>(), Is.Null);
+            Assert.That(humanPrefab.transform.Find("ViewPivot/SwatterSocket/SwatterVisual"), Is.Not.Null);
             Assert.That(GameObject.Find("Huge_Mug").GetComponent<Collider>(), Is.Null);
             Assert.That(GameObject.Find("Fruit_Bowl").GetComponent<Collider>(), Is.Null);
 
