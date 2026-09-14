@@ -9,7 +9,8 @@
     "Unity.Netcode.Runtime",
     "Unity.Networking.Transport",
     "Unity.Collections",
-    "Unity.ugui"
+    "Unity.ugui",
+    "Unity.Multiplayer.Tools.NetworkSimulator.Runtime"
   ],
   "autoReferenced": true
 }

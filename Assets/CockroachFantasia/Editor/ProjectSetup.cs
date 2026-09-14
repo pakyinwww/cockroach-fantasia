@@ -225,6 +225,11 @@ namespace CockroachFantasia.Editor
                 }
                 else if (definition.Name == "Kitchen")
                 {
+                    if (root.GetComponent<KitchenPlayerSpawner>() == null)
+                    {
+                        root.AddComponent<KitchenPlayerSpawner>();
+                        EditorSceneManager.MarkSceneDirty(scene);
+                    }
                     CreateKitchenLayout(scene);
                 }
 
@@ -323,6 +328,7 @@ namespace CockroachFantasia.Editor
                 cockroachPrefab = PrefabUtility.SaveAsPrefabAsset(cockroach, CockroachPlayerPath);
                 UnityEngine.Object.DestroyImmediate(cockroach);
             }
+            cockroachPrefab = EnsurePlayerNetworking(CockroachPlayerPath, 3.2f);
 
             if (!prefabList.Contains(cockroachPrefab))
             {
@@ -372,12 +378,32 @@ namespace CockroachFantasia.Editor
                 humanPrefab = PrefabUtility.SaveAsPrefabAsset(human, HumanPlayerPath);
                 UnityEngine.Object.DestroyImmediate(human);
             }
+            humanPrefab = EnsurePlayerNetworking(HumanPlayerPath, 4.5f);
 
             if (!prefabList.Contains(humanPrefab))
             {
                 prefabList.Add(new NetworkPrefab { Prefab = humanPrefab });
                 EditorUtility.SetDirty(prefabList);
             }
+        }
+
+        private static GameObject EnsurePlayerNetworking(string prefabPath, float baseSpeed)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (asset.GetComponent<OwnerNetworkTransform>() != null &&
+                asset.GetComponent<MovementSanityMonitor>() != null &&
+                asset.GetComponent<NetworkRoleAvatar>() != null)
+                return asset;
+
+            var root = PrefabUtility.LoadPrefabContents(prefabPath);
+            var transformSync = root.GetComponent<OwnerNetworkTransform>() ?? root.AddComponent<OwnerNetworkTransform>();
+            transformSync.ConfigureForPlayerMotion();
+            var monitor = root.GetComponent<MovementSanityMonitor>() ?? root.AddComponent<MovementSanityMonitor>();
+            monitor.Configure(baseSpeed);
+            if (root.GetComponent<NetworkRoleAvatar>() == null) root.AddComponent<NetworkRoleAvatar>();
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            PrefabUtility.UnloadPrefabContents(root);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
         }
 
         private static void CreateCameraAndLight(Scene scene)

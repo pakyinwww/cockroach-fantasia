@@ -1,3 +1,5 @@
+using System;
+using Unity.Multiplayer.Tools.NetworkSimulator.Runtime;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
@@ -45,6 +47,7 @@ namespace CockroachFantasia.Networking
             Manager.NetworkConfig.EnableSceneManagement = true;
             Manager.NetworkConfig.TickRate = 30;
             Manager.NetworkConfig.ClientConnectionBufferTimeout = 20;
+            ConfigureNetworkSimulation();
 
             var prefabs = Resources.Load<NetworkPrefabsList>(PrefabListResource);
             if (prefabs == null || prefabs.PrefabList.Count == 0)
@@ -87,7 +90,31 @@ namespace CockroachFantasia.Networking
 
             var rosterObject = Instantiate(rosterPrefab);
             DontDestroyOnLoad(rosterObject);
-            rosterObject.GetComponent<NetworkObject>().Spawn();
+            rosterObject.GetComponent<NetworkObject>().Spawn(destroyWithScene: false);
+        }
+
+        private void ConfigureNetworkSimulation()
+        {
+            if (!Debug.isDebugBuild && !Application.isEditor) return;
+            var arguments = Environment.GetCommandLineArgs();
+            var delay = GetIntArgument(arguments, "-simulateDelayMs");
+            var jitter = GetIntArgument(arguments, "-simulateJitterMs");
+            var loss = Mathf.Clamp(GetIntArgument(arguments, "-simulateLossPercent"), 0, 100);
+            if (delay <= 0 && jitter <= 0 && loss <= 0) return;
+
+            var simulator = gameObject.AddComponent<NetworkSimulator>();
+            simulator.ConnectionPreset = NetworkSimulatorPreset.Create("Command-line diagnostic",
+                packetDelayMs: Mathf.Max(0, delay), packetJitterMs: Mathf.Max(0, jitter), packetLossPercent: loss);
+            Debug.Log($"NETWORK_SIMULATOR delay={delay}ms jitter={jitter}ms loss={loss}%");
+        }
+
+        private static int GetIntArgument(string[] arguments, string key)
+        {
+            var index = Array.FindIndex(arguments,
+                argument => string.Equals(argument, key, StringComparison.OrdinalIgnoreCase));
+            return index >= 0 && index + 1 < arguments.Length && int.TryParse(arguments[index + 1], out var value)
+                ? value
+                : 0;
         }
     }
 }

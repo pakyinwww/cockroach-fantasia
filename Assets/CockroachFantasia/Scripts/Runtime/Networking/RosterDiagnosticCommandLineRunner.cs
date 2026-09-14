@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using CockroachFantasia.Characters;
 using Unity.Netcode;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -165,6 +167,11 @@ namespace CockroachFantasia.Networking
                     Debug.Log($"ROSTER_KITCHEN_SUCCESS client={localId} seat={preserved.Seat}");
                 }
 
+                if (arguments.Contains("-movementSmoke"))
+                {
+                    await RunMovementSmokeAsync(arguments, localId, requestedSeat, expectedPlayers);
+                }
+
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
                 while (Time.realtimeSinceStartupAsDouble < end)
                 {
@@ -193,6 +200,82 @@ namespace CockroachFantasia.Networking
             {
                 throw new InvalidOperationException("Authoritative roster invariant was violated.");
             }
+        }
+
+        private static async Task RunMovementSmokeAsync(string[] arguments, ulong localId, LobbySeat expectedSeat,
+            int expectedPlayers)
+        {
+            await WaitUntilAsync(() =>
+            {
+                var player = NetworkManager.Singleton?.LocalClient?.PlayerObject;
+                return player != null && player.GetComponent<NetworkRoleAvatar>() != null;
+            }, TimeSpan.FromSeconds(30), "local role avatar");
+            await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<NetworkRoleAvatar>(
+                    FindObjectsSortMode.None).Length == expectedPlayers,
+                TimeSpan.FromSeconds(30), "remote role avatars");
+
+            var localObject = NetworkManager.Singleton.LocalClient.PlayerObject;
+            var identity = localObject.GetComponent<NetworkRoleAvatar>();
+            if (identity.Seat != expectedSeat)
+                throw new InvalidOperationException($"Spawned {identity.Seat} instead of {expectedSeat}.");
+
+            var before = UnityEngine.Object.FindObjectsByType<NetworkRoleAvatar>(FindObjectsSortMode.None)
+                .ToDictionary(avatar => avatar.OwnerClientId, avatar => avatar.transform.position);
+            var localStart = localObject.transform.position;
+            using var sentBytes = ProfilerRecorder.StartNew(ProfilerCategory.Network, "Total Bytes Sent", 128);
+            long sampledBytes = 0;
+            for (var frame = 0; frame < 90; frame++)
+            {
+                var move = GetDiagnosticMove(expectedSeat, frame);
+                if (localObject.TryGetComponent<CockroachMotor>(out var cockroach))
+                    cockroach.SimulateInput(move, new Vector2(0.25f, 0f), 1f / 30f);
+                else if (localObject.TryGetComponent<HumanMotor>(out var human))
+                    human.SimulateInput(move, new Vector2(0.25f, 0f), 1f / 30f);
+                else
+                    throw new InvalidOperationException("Role avatar has no movement controller.");
+
+                sampledBytes += Math.Max(0, sentBytes.LastValue);
+                await Task.Delay(33);
+            }
+
+            if (Vector3.Distance(localStart, localObject.transform.position) < 0.08f)
+                throw new InvalidOperationException("Owner movement waited or failed to move locally.");
+
+            if (arguments.Contains("-movementTeleportViolation"))
+            {
+                localObject.transform.position = new Vector3(50f, 5f, 50f);
+                var monitor = localObject.GetComponent<MovementSanityMonitor>();
+                await WaitUntilAsync(() => monitor.CorrectionCount > 0 &&
+                                           Mathf.Abs(localObject.transform.position.x) < 9f &&
+                                           Mathf.Abs(localObject.transform.position.z) < 7f,
+                    TimeSpan.FromSeconds(15), "host movement correction");
+                Debug.Log($"MOVEMENT_CORRECTION_SUCCESS corrections={monitor.CorrectionCount}");
+            }
+
+            await Task.Delay(2500);
+            var avatars = UnityEngine.Object.FindObjectsByType<NetworkRoleAvatar>(FindObjectsSortMode.None);
+            var bounds = new Bounds(new Vector3(0f, 1.05f, 0f), new Vector3(17.2f, 3f, 13.2f));
+            if (avatars.Length != expectedPlayers || avatars.Any(avatar => !bounds.Contains(avatar.transform.position)))
+                throw new InvalidOperationException("Remote player state was missing or outside playable bounds.");
+            var remoteMoved = avatars.Any(avatar => avatar.OwnerClientId != localId &&
+                                                    before.TryGetValue(avatar.OwnerClientId, out var start) &&
+                                                    Vector3.Distance(start, avatar.transform.position) > 0.05f);
+            if (expectedPlayers > 1 && !remoteMoved)
+                throw new InvalidOperationException("No interpolated remote movement was observed.");
+
+            Debug.Log($"MOVEMENT_DIAGNOSTIC_SUCCESS remoteCount={avatars.Length} sampledSentBytes={sampledBytes} " +
+                      $"sampleSeconds=3 unreliableDeltas=true");
+        }
+
+        private static Vector2 GetDiagnosticMove(LobbySeat seat, int frame)
+        {
+            if (frame >= 30) return Vector2.up;
+            return seat switch
+            {
+                LobbySeat.CockroachOne => Vector2.left,
+                LobbySeat.CockroachThree => Vector2.right,
+                _ => Vector2.up
+            };
         }
 
         private static async Task<string> WaitForTextFileAsync(string path, TimeSpan timeout)
