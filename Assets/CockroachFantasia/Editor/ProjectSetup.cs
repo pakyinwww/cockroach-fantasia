@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using CockroachFantasia.App;
+using CockroachFantasia.Characters;
 using CockroachFantasia.Networking;
 using CockroachFantasia.UI;
 using CockroachFantasia.World;
@@ -25,6 +26,7 @@ namespace CockroachFantasia.Editor
         private const string ScenesRoot = Root + "/Scenes";
         private const string DiagnosticAvatarPath = Root + "/Resources/Networking/DiagnosticAvatar.prefab";
         private const string NetworkRosterPath = Root + "/Resources/Networking/NetworkRoster.prefab";
+        private const string CockroachPlayerPath = Root + "/Resources/Networking/CockroachPlayer.prefab";
         private const string NetworkPrefabsPath = Root + "/Resources/Networking/CockroachNetworkPrefabs.asset";
 
         private static readonly (string Name, string Purpose)[] Scenes =
@@ -276,6 +278,54 @@ namespace CockroachFantasia.Editor
             if (!prefabList.Contains(rosterPrefab))
             {
                 prefabList.Add(new NetworkPrefab { Prefab = rosterPrefab });
+                EditorUtility.SetDirty(prefabList);
+            }
+
+            var cockroachPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CockroachPlayerPath);
+            if (cockroachPrefab == null)
+            {
+                var cockroach = new GameObject("CockroachPlayer");
+                cockroach.AddComponent<NetworkObject>();
+                var controller = cockroach.AddComponent<CharacterController>();
+                controller.radius = 0.16f;
+                controller.height = 0.28f;
+                controller.center = new Vector3(0f, 0.14f, 0f);
+                controller.stepOffset = 0.08f;
+                controller.slopeLimit = 52f;
+
+                var body = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                body.name = "GreyboxBody";
+                body.transform.SetParent(cockroach.transform, false);
+                body.transform.localPosition = new Vector3(0f, 0.13f, 0f);
+                body.transform.localScale = new Vector3(0.3f, 0.12f, 0.42f);
+                UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+                body.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial("Nest", new Color(0.29f, 0.14f, 0.19f));
+
+                var pivot = new GameObject("CameraPivot").transform;
+                pivot.SetParent(cockroach.transform, false);
+                pivot.localPosition = new Vector3(0f, 0.17f, 0f);
+                var cameraObject = new GameObject("OwnerCamera", typeof(Camera), typeof(AudioListener));
+                cameraObject.transform.SetParent(pivot, false);
+                var camera = cameraObject.GetComponent<Camera>();
+                camera.enabled = false;
+                camera.nearClipPlane = 0.02f;
+                camera.fieldOfView = 68f;
+                var listener = cameraObject.GetComponent<AudioListener>();
+                listener.enabled = false;
+
+                var carrySocket = new GameObject("CarrySocket").transform;
+                carrySocket.SetParent(cockroach.transform, false);
+                carrySocket.localPosition = new Vector3(0f, 0.23f, 0.24f);
+
+                var motor = cockroach.AddComponent<CockroachMotor>();
+                motor.Configure(pivot, camera, listener, carrySocket);
+                cockroachPrefab = PrefabUtility.SaveAsPrefabAsset(cockroach, CockroachPlayerPath);
+                UnityEngine.Object.DestroyImmediate(cockroach);
+            }
+
+            if (!prefabList.Contains(cockroachPrefab))
+            {
+                prefabList.Add(new NetworkPrefab { Prefab = cockroachPrefab });
                 EditorUtility.SetDirty(prefabList);
             }
         }
