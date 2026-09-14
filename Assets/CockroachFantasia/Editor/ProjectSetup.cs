@@ -27,6 +27,7 @@ namespace CockroachFantasia.Editor
         private const string DiagnosticAvatarPath = Root + "/Resources/Networking/DiagnosticAvatar.prefab";
         private const string NetworkRosterPath = Root + "/Resources/Networking/NetworkRoster.prefab";
         private const string CockroachPlayerPath = Root + "/Resources/Networking/CockroachPlayer.prefab";
+        private const string HumanPlayerPath = Root + "/Resources/Networking/HumanPlayer.prefab";
         private const string NetworkPrefabsPath = Root + "/Resources/Networking/CockroachNetworkPrefabs.asset";
 
         private static readonly (string Name, string Purpose)[] Scenes =
@@ -326,6 +327,55 @@ namespace CockroachFantasia.Editor
             if (!prefabList.Contains(cockroachPrefab))
             {
                 prefabList.Add(new NetworkPrefab { Prefab = cockroachPrefab });
+                EditorUtility.SetDirty(prefabList);
+            }
+
+            var humanPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(HumanPlayerPath);
+            if (humanPrefab == null)
+            {
+                var human = new GameObject("HumanPlayer");
+                human.AddComponent<NetworkObject>();
+                var controller = human.AddComponent<CharacterController>();
+                controller.radius = 0.38f;
+                controller.height = 1.8f;
+                controller.center = new Vector3(0f, 0.9f, 0f);
+                controller.stepOffset = 0.3f;
+                controller.slopeLimit = 45f;
+
+                var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                body.name = "GreyboxBody";
+                body.transform.SetParent(human.transform, false);
+                body.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+                body.transform.localScale = new Vector3(0.72f, 0.9f, 0.72f);
+                UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+                body.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial("Counter", new Color(0.38f, 0.58f, 0.62f));
+
+                var pivot = new GameObject("ViewPivot").transform;
+                pivot.SetParent(human.transform, false);
+                pivot.localPosition = new Vector3(0f, 1.62f, 0f);
+                var cameraObject = new GameObject("OwnerCamera", typeof(Camera), typeof(AudioListener));
+                cameraObject.transform.SetParent(pivot, false);
+                var camera = cameraObject.GetComponent<Camera>();
+                camera.enabled = false;
+                camera.nearClipPlane = 0.04f;
+                camera.fieldOfView = 72f;
+                var listener = cameraObject.GetComponent<AudioListener>();
+                listener.enabled = false;
+
+                var swatterSocket = new GameObject("SwatterSocket").transform;
+                swatterSocket.SetParent(pivot, false);
+                swatterSocket.localPosition = new Vector3(0.3f, -0.24f, 0.52f);
+                swatterSocket.localRotation = Quaternion.Euler(8f, -8f, 0f);
+
+                var motor = human.AddComponent<HumanMotor>();
+                motor.Configure(pivot, camera, listener, swatterSocket);
+                humanPrefab = PrefabUtility.SaveAsPrefabAsset(human, HumanPlayerPath);
+                UnityEngine.Object.DestroyImmediate(human);
+            }
+
+            if (!prefabList.Contains(humanPrefab))
+            {
+                prefabList.Add(new NetworkPrefab { Prefab = humanPrefab });
                 EditorUtility.SetDirty(prefabList);
             }
         }
