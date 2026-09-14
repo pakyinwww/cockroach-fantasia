@@ -37,12 +37,15 @@ namespace CockroachFantasia.Characters
         private float cameraPitch = 18f;
         private bool matchPlaying;
         private bool respawning;
+        private float carrySpeedMultiplier = 1f;
 
         public Transform CarrySocket => carrySocket;
         public bool CanAcceptInput => matchPlaying && !respawning;
         public bool IsRespawning => respawning;
         public float CameraPitch => cameraPitch;
         public Camera OwnerCamera => ownerCamera;
+        public float CurrentSpeedMultiplier => carrySpeedMultiplier;
+        public float EffectiveSpeed => baseSpeed * carrySpeedMultiplier;
 
         public void Configure(Transform pivot, Camera localCamera, AudioListener listener, Transform socket)
         {
@@ -100,6 +103,11 @@ namespace CockroachFantasia.Characters
             invertPitch = invertY;
         }
 
+        public void SetCarrySpeedMultiplier(float multiplier)
+        {
+            carrySpeedMultiplier = Mathf.Clamp(multiplier, 0.1f, 1f);
+        }
+
         public void SimulateInput(Vector2 moveInput, Vector2 lookInput, float deltaTime)
         {
             if (!CanAcceptInput || deltaTime <= 0f) return;
@@ -115,7 +123,7 @@ namespace CockroachFantasia.Characters
             cameraForward.Normalize();
             cameraRight.Normalize();
             var desiredDirection = Vector3.ClampMagnitude(cameraForward * moveInput.y + cameraRight * moveInput.x, 1f);
-            var desiredVelocity = desiredDirection * baseSpeed;
+            var desiredVelocity = desiredDirection * EffectiveSpeed;
             planarVelocity = Vector3.MoveTowards(planarVelocity, desiredVelocity, acceleration * deltaTime);
 
             if (desiredDirection.sqrMagnitude > 0.001f)

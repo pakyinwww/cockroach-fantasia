@@ -6,7 +6,8 @@ param(
     [switch]$TeleportViolation,
     [switch]$MatchState,
     [switch]$SkipMovement,
-    [switch]$FoodSpawn
+    [switch]$FoodSpawn,
+    [switch]$FoodCarry
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,6 +23,7 @@ $common = "-batchmode -nographics -rosterExpectedPlayers 4 -requireValidDistribu
 if (-not $SkipMovement) { $common += ' -movementSmoke' }
 if ($MatchState) { $common += ' -matchStateSmoke' }
 if ($FoodSpawn) { $common += ' -foodSpawnSmoke' }
+if ($FoodCarry) { $common += ' -foodCarrySmoke' }
 $players = @(
     @{ Key = 'host'; Name = 'Human'; Seat = 'Human'; Extra = '-rosterHostSmoke -rosterStartMatch -rosterDurationSeconds 8' },
     @{ Key = 'c1'; Name = 'RoachA'; Seat = 'CockroachOne'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
@@ -74,6 +76,7 @@ $results = for ($index = 0; $index -lt $players.Count; $index++) {
         Correction = (Select-String -Path $logPath -Pattern 'MOVEMENT_CORRECTION_SUCCESS' | ForEach-Object Line) -join ''
         MatchState = (Select-String -Path $logPath -Pattern 'MATCH_STATE_DIAGNOSTIC' | ForEach-Object Line) -join ''
         FoodSpawn = (Select-String -Path $logPath -Pattern 'FOOD_SPAWN_DIAGNOSTIC' | ForEach-Object Line) -join ''
+        FoodCarry = (Select-String -Path $logPath -Pattern 'FOOD_CARRY_DIAGNOSTIC phase=dropped' | ForEach-Object Line) -join ''
     }
 }
 
@@ -82,7 +85,8 @@ if ($processes.Where({ $_.ExitCode -ne 0 }).Count -gt 0 -or
     (-not $SkipMovement -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Movement) }).Count -gt 0) -or
     ($TeleportViolation -and [string]::IsNullOrWhiteSpace($results[1].Correction)) -or
     ($MatchState -and $results.Where({ [string]::IsNullOrWhiteSpace($_.MatchState) }).Count -gt 0) -or
-    ($FoodSpawn -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodSpawn) }).Count -gt 0)) {
+    ($FoodSpawn -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodSpawn) }).Count -gt 0) -or
+    ($FoodCarry -and $results.Where({ [string]::IsNullOrWhiteSpace($_.FoodCarry) }).Count -gt 0)) {
     throw "Movement diagnostic failed. Inspect $outputDirectory."
 }
 

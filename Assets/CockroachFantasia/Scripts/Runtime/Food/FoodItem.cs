@@ -40,6 +40,8 @@ namespace CockroachFantasia.Food
 
         public override void OnNetworkSpawn()
         {
+            lifecycle.OnValueChanged += OnLifecycleChanged;
+            ApplyWorldPresentation(lifecycle.Value == FoodLifecycleState.World);
             if (!IsServer) return;
             if (definition == null)
             {
@@ -49,6 +51,43 @@ namespace CockroachFantasia.Food
             }
 
             InitializeBeforeSpawn();
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            lifecycle.OnValueChanged -= OnLifecycleChanged;
+        }
+
+        public bool TryClaimByServer(ulong clientId)
+        {
+            if (!IsServer || lifecycle.Value != FoodLifecycleState.World ||
+                carrierClientId.Value != NoCarrier) return false;
+            carrierClientId.Value = clientId;
+            lifecycle.Value = FoodLifecycleState.Carried;
+            return true;
+        }
+
+        public bool TryDropByServer(ulong clientId, Vector3 floorPosition)
+        {
+            if (!IsServer || lifecycle.Value != FoodLifecycleState.Carried ||
+                carrierClientId.Value != clientId) return false;
+            transform.position = floorPosition;
+            carrierClientId.Value = NoCarrier;
+            lifecycle.Value = FoodLifecycleState.World;
+            return true;
+        }
+
+        private void OnLifecycleChanged(FoodLifecycleState previous, FoodLifecycleState current)
+        {
+            ApplyWorldPresentation(current == FoodLifecycleState.World);
+        }
+
+        private void ApplyWorldPresentation(bool visible)
+        {
+            foreach (var itemRenderer in GetComponentsInChildren<Renderer>(true))
+                itemRenderer.enabled = visible;
+            foreach (var itemCollider in GetComponentsInChildren<Collider>(true))
+                itemCollider.enabled = visible;
         }
     }
 }

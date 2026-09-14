@@ -207,6 +207,11 @@ namespace CockroachFantasia.Networking
                     Debug.Log($"FOOD_SPAWN_DIAGNOSTIC items={items.Length} points={authoredPoints} sizes={sizes}");
                 }
 
+                if (arguments.Contains("-foodCarrySmoke"))
+                {
+                    await RunFoodCarrySmokeAsync(requestedSeat);
+                }
+
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
                 while (Time.realtimeSinceStartupAsDouble < end)
                 {
@@ -223,6 +228,59 @@ namespace CockroachFantasia.Networking
                 Debug.LogError("ROSTER_DIAGNOSTIC_FAILED");
                 Application.Quit(5);
             }
+        }
+
+        private static async Task RunFoodCarrySmokeAsync(LobbySeat requestedSeat)
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.AcceptsGameplayRequests &&
+                                       UnityEngine.Object.FindObjectsByType<FoodItem>(
+                                           FindObjectsSortMode.None).Length == 9,
+                TimeSpan.FromSeconds(20), "food carrying prerequisites");
+            var game = NetworkGameManager.Instance;
+            var playingStartedAt = game.PlayingEndTimestamp - game.Rules.MatchDurationSeconds;
+            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >= playingStartedAt + 0.75d,
+                TimeSpan.FromSeconds(5), "food pickup contest time");
+
+            var localCarrier = NetworkManager.Singleton.LocalClient.PlayerObject?
+                .GetComponent<CockroachFoodCarrier>();
+            var contested = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None)
+                .OrderBy(food => food.NetworkObjectId).First();
+            if (requestedSeat != LobbySeat.Human)
+            {
+                if (localCarrier == null)
+                    throw new InvalidOperationException("Cockroach player has no food carrier component.");
+                localCarrier.RequestPickupForDiagnostics(contested);
+            }
+
+            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >= playingStartedAt + 1.75d,
+                TimeSpan.FromSeconds(5), "food pickup replication");
+            var items = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+            var carriers = UnityEngine.Object.FindObjectsByType<CockroachFoodCarrier>(FindObjectsSortMode.None);
+            var carriedItems = items.Where(food => food.Lifecycle == FoodLifecycleState.Carried).ToArray();
+            var winners = carriers.Where(carrier => carrier.IsCarrying).ToArray();
+            if (carriedItems.Length != 1 || winners.Length != 1 ||
+                carriedItems[0].CarrierClientId != winners[0].OwnerClientId ||
+                carriedItems[0].NetworkObjectId != winners[0].CarriedFoodNetworkId ||
+                !winners[0].HasCarriedVisual || winners[0].CarriedVisualSize != carriedItems[0].Size ||
+                Math.Abs(winners[0].GetComponent<CockroachMotor>().CurrentSpeedMultiplier -
+                         carriedItems[0].Definition.CarrySpeedMultiplier) > 0.001f)
+                throw new InvalidOperationException("Atomic pickup state, visual, or speed penalty disagreed.");
+            Debug.Log($"FOOD_CARRY_DIAGNOSTIC phase=carried winner={winners[0].OwnerClientId} " +
+                      $"food={carriedItems[0].NetworkObjectId} size={carriedItems[0].Size} " +
+                      $"speed={carriedItems[0].Definition.CarrySpeedMultiplier:F2}");
+
+            if (localCarrier != null && localCarrier.IsCarrying)
+                localCarrier.RequestDropForDiagnostics();
+            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >= playingStartedAt + 2.75d &&
+                                       UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None)
+                                           .All(food => food.Lifecycle == FoodLifecycleState.World) &&
+                                       UnityEngine.Object.FindObjectsByType<CockroachFoodCarrier>(
+                                           FindObjectsSortMode.None).All(carrier => !carrier.IsCarrying),
+                TimeSpan.FromSeconds(5), "food drop replication");
+            if (items.Sum(food => food.Definition.Points) != FoodConfigurationValidator.RequiredAvailablePoints)
+                throw new InvalidOperationException("Food was duplicated or lost after dropping.");
+            Debug.Log("FOOD_CARRY_DIAGNOSTIC phase=dropped items=9 points=18");
         }
 
         private static void ValidateRosterInvariant(NetworkRoster roster)

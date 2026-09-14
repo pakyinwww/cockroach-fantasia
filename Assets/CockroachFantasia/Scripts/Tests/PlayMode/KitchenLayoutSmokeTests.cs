@@ -57,6 +57,10 @@ namespace CockroachFantasia.Tests.PlayMode
             Assert.That(FoodConfigurationValidator.TryValidate(foodSpawner.SpawnSet, out var foodPoints,
                 out var foodRejection), Is.True, foodRejection);
             Assert.That(foodPoints, Is.EqualTo(18));
+            var cockroachPrefab = Resources.Load<GameObject>("Networking/CockroachPlayer");
+            var humanPrefab = Resources.Load<GameObject>("Networking/HumanPlayer");
+            Assert.That(cockroachPrefab.GetComponent<CockroachFoodCarrier>(), Is.Not.Null);
+            Assert.That(humanPrefab.GetComponent<CockroachFoodCarrier>(), Is.Null);
             Assert.That(GameObject.Find("Huge_Mug").GetComponent<Collider>(), Is.Null);
             Assert.That(GameObject.Find("Fruit_Bowl").GetComponent<Collider>(), Is.Null);
 

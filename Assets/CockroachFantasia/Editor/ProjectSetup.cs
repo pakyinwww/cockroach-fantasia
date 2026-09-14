@@ -360,6 +360,7 @@ namespace CockroachFantasia.Editor
                 UnityEngine.Object.DestroyImmediate(cockroach);
             }
             cockroachPrefab = EnsurePlayerNetworking(CockroachPlayerPath, 3.2f);
+            cockroachPrefab = EnsureCockroachFoodCarrier(CockroachPlayerPath);
 
             if (!prefabList.Contains(cockroachPrefab))
             {
@@ -500,6 +501,17 @@ namespace CockroachFantasia.Editor
             var monitor = root.GetComponent<MovementSanityMonitor>() ?? root.AddComponent<MovementSanityMonitor>();
             monitor.Configure(baseSpeed);
             if (root.GetComponent<NetworkRoleAvatar>() == null) root.AddComponent<NetworkRoleAvatar>();
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            PrefabUtility.UnloadPrefabContents(root);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        }
+
+        private static GameObject EnsureCockroachFoodCarrier(string prefabPath)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (asset.GetComponent<CockroachFoodCarrier>() != null) return asset;
+            var root = PrefabUtility.LoadPrefabContents(prefabPath);
+            root.AddComponent<CockroachFoodCarrier>();
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             PrefabUtility.UnloadPrefabContents(root);
             return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
