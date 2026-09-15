@@ -13,7 +13,8 @@ param(
     [switch]$Respawn,
     [switch]$Hud,
     [switch]$ResultsRematch,
-    [switch]$Art
+    [switch]$Art,
+    [switch]$Audio
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +37,7 @@ if ($Respawn) { $common += ' -swatterSmoke -respawnSmoke' }
 if ($Hud) { $common += ' -hudSmoke' }
 if ($ResultsRematch) { $common += ' -resultsRematchSmoke' }
 if ($Art) { $common += ' -artSmoke' }
+if ($Audio) { $common += ' -audioSmoke' }
 $players = @(
     @{ Key = 'host'; Name = 'Human'; Seat = 'Human'; Extra = '-rosterHostSmoke -rosterStartMatch -rosterDurationSeconds 8' },
     @{ Key = 'c1'; Name = 'RoachA'; Seat = 'CockroachOne'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
@@ -95,6 +97,7 @@ $results = for ($index = 0; $index -lt $players.Count; $index++) {
         Hud = (Select-String -Path $logPath -Pattern 'HUD_DIAGNOSTIC' | ForEach-Object Line) -join ''
         ResultsRematch = (Select-String -Path $logPath -Pattern 'RESULTS_REMATCH_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
         Art = (Select-String -Path $logPath -Pattern 'ART_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
+        Audio = (Select-String -Path $logPath -Pattern 'AUDIO_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
     }
 }
 
@@ -110,7 +113,8 @@ if ($processes.Where({ $_.ExitCode -ne 0 }).Count -gt 0 -or
     ($Respawn -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Respawn) }).Count -gt 0) -or
     ($Hud -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Hud) }).Count -gt 0) -or
     ($ResultsRematch -and $results.Where({ [string]::IsNullOrWhiteSpace($_.ResultsRematch) }).Count -gt 0) -or
-    ($Art -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Art) }).Count -gt 0)) {
+    ($Art -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Art) }).Count -gt 0) -or
+    ($Audio -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Audio) }).Count -gt 0)) {
     throw "Movement diagnostic failed. Inspect $outputDirectory."
 }
 

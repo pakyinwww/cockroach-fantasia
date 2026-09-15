@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using CockroachFantasia.Characters;
 using CockroachFantasia.Food;
 using CockroachFantasia.Gameplay;
+using CockroachFantasia.Audio;
 using Unity.Netcode;
 using Unity.Profiling;
 using UnityEngine;
@@ -227,6 +228,11 @@ namespace CockroachFantasia.Networking
                     await RunArtSmokeAsync();
                 }
 
+                if (arguments.Contains("-audioSmoke"))
+                {
+                    await RunAudioSmokeAsync();
+                }
+
                 if (arguments.Contains("-resultsRematchSmoke"))
                 {
                     await RunResultsRematchSmokeAsync(roster, localId, requestedSeat, expectedPlayers);
@@ -299,6 +305,23 @@ namespace CockroachFantasia.Networking
                 GameObject.Find("StylizedKitchenDressingV2")?.GetComponentsInChildren<Collider>().Length != 0)
                 throw new InvalidOperationException("Stylized art is incomplete or changed gameplay collision.");
             Debug.Log("ART_DIAGNOSTIC_SUCCESS characters=4 foodSizes=3 dressingCollision=0 bloodlessVfx=true");
+        }
+
+        private static async Task RunAudioSmokeAsync()
+        {
+            await Task.Delay(100);
+            var audio = GameAudio.Instance;
+            var before = audio.PlayedCueCount;
+            foreach (GameAudioCue cue in Enum.GetValues(typeof(GameAudioCue)))
+            {
+                GameAudio.Play(cue);
+                await Task.Delay(60);
+            }
+            if (!audio.IsRoutedToMixer || audio.PlayedCueCount - before !=
+                Enum.GetValues(typeof(GameAudioCue)).Length)
+                throw new InvalidOperationException("Procedural audio cues are missing or bypassing the mixer.");
+            Debug.Log($"AUDIO_DIAGNOSTIC_SUCCESS cues={audio.PlayedCueCount - before} " +
+                      "mixerRouted=true playfulNonViolent=true");
         }
 
         private static async Task RunResultsRematchSmokeAsync(NetworkRoster roster, ulong localId,

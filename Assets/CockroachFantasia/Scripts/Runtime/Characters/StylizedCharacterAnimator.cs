@@ -1,4 +1,5 @@
 using CockroachFantasia.Food;
+using CockroachFantasia.Audio;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -15,6 +16,7 @@ namespace CockroachFantasia.Characters
         private Vector3 restScale;
         private Vector3 previousPosition;
         private bool isCockroach;
+        private float stepDistance;
 
         public Transform ArtRoot => artRoot;
 
@@ -47,6 +49,16 @@ namespace CockroachFantasia.Characters
             var delta = transform.position - previousPosition;
             previousPosition = transform.position;
             var speed = new Vector2(delta.x, delta.z).magnitude / Mathf.Max(Time.deltaTime, 0.001f);
+            stepDistance += new Vector2(delta.x, delta.z).magnitude;
+            var stride = isCockroach ? 0.38f : 1.15f;
+            if (speed > 0.15f && stepDistance >= stride)
+            {
+                stepDistance = 0f;
+                GameAudio.Play(isCockroach ? GameAudioCue.CockroachStep : GameAudioCue.HumanStep,
+                    transform.position);
+                if (isCockroach && GetComponent<CockroachFoodCarrier>()?.IsCarrying == true)
+                    GameAudio.Play(GameAudioCue.FoodRustle, transform.position, 0.035f);
+            }
             var moving = Mathf.Clamp01(speed / (isCockroach ? 3.2f : 4.5f));
             var phase = Time.time * (isCockroach ? 15f : 9f);
             artRoot.localPosition = restPosition + Vector3.up * (Mathf.Abs(Mathf.Sin(phase)) * 0.025f * moving);

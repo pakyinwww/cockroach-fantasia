@@ -9,6 +9,7 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using CockroachFantasia.UI;
+using CockroachFantasia.Audio;
 
 namespace CockroachFantasia.Gameplay
 {
@@ -76,8 +77,12 @@ namespace CockroachFantasia.Gameplay
             var serverTime = NetworkManager.ServerTime.Time;
             if (!SwatterAttackRules.CanStart(identity.Seat, game.Phase, serverTime, lastAcceptedServerTime)) return;
             lastAcceptedServerTime = serverTime;
+            PlaySwingRpc(transform.position);
             StartCoroutine(ResolveAfterWindup());
         }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void PlaySwingRpc(Vector3 position) => GameAudio.Play(GameAudioCue.SwatterSwing, position);
 
         private IEnumerator ResolveAfterWindup()
         {
@@ -134,6 +139,7 @@ namespace CockroachFantasia.Gameplay
             LastConfirmedHitCount = hitCount;
             var flash = ComicVfx.SpawnBurst(position, new Color(1f, 0.35f, 0.2f), "WHOMP!");
             flash.name = "SwatterImpact";
+            GameAudio.Play(GameAudioCue.HarmlessImpact, position);
         }
 
         private void BeginLocalSwingPresentation()

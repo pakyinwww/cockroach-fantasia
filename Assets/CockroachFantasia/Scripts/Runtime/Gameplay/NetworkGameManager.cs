@@ -5,6 +5,7 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using CockroachFantasia.UI;
+using CockroachFantasia.Audio;
 
 namespace CockroachFantasia.Gameplay
 {
@@ -116,6 +117,8 @@ namespace CockroachFantasia.Gameplay
         private void PlayDepositVfxRpc(Vector3 position, int points)
         {
             ComicVfx.SpawnBurst(position + Vector3.up * 0.2f, new Color(0.55f, 1f, 0.38f), $"YUM! +{points}");
+            GameAudio.Play(GameAudioCue.Deposit, position);
+            GameAudio.Play(GameAudioCue.Score, null, 0.13f);
         }
 
         private void PublishState()

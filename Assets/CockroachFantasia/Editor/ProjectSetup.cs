@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using CockroachFantasia.App;
 using CockroachFantasia.Characters;
 using CockroachFantasia.Food;
@@ -12,6 +13,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.Rendering;
@@ -35,6 +37,7 @@ namespace CockroachFantasia.Editor
         private const string FoodDataRoot = Root + "/Data/FoodDefinitions";
         private const string FoodPrefabRoot = Root + "/Resources/Food";
         private const string FoodSpawnSetPath = FoodDataRoot + "/FixedKitchenFood.asset";
+        private const string AudioMixerPath = Root + "/Resources/Audio/CockroachMixer.mixer";
 
         private static readonly (string Name, string Purpose)[] Scenes =
         {
@@ -48,6 +51,7 @@ namespace CockroachFantasia.Editor
         public static void Run()
         {
             CreateFolders();
+            CreateAudioMixer();
             ConfigurePlayer();
             ConfigureRenderPipeline();
             CreateMatchRules();
@@ -133,7 +137,7 @@ namespace CockroachFantasia.Editor
                 "Audio/Music", "Audio/SFX", "Data/MatchRules", "Data/FoodDefinitions",
                 "Input", "Prefabs/Characters", "Prefabs/Food", "Prefabs/Networking",
                 "Prefabs/Props", "Prefabs/UI", "Scenes", "Settings",
-                "Resources/Networking", "Resources/Food",
+                "Resources/Networking", "Resources/Food", "Resources/Audio",
                 "Scripts/Runtime/App", "Scripts/Runtime/Camera", "Scripts/Runtime/Characters",
                 "Scripts/Runtime/Food", "Scripts/Runtime/Gameplay", "Scripts/Runtime/Networking",
                 "Scripts/Runtime/UI", "Scripts/Runtime/World", "Scripts/Tests/EditMode", "Scripts/Tests/PlayMode"
@@ -143,6 +147,23 @@ namespace CockroachFantasia.Editor
             {
                 Directory.CreateDirectory(Path.Combine(Root, folder));
             }
+        }
+
+        private static void CreateAudioMixer()
+        {
+            if (AssetDatabase.LoadAssetAtPath<AudioMixer>(AudioMixerPath) != null) return;
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var controllerType = assembly.GetType("UnityEditor.Audio.AudioMixerController");
+                var factory = controllerType?.GetMethod("CreateMixerControllerAtPath",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic, null,
+                    new[] { typeof(string) }, null);
+                if (factory == null) continue;
+                factory.Invoke(null, new object[] { AudioMixerPath });
+                AssetDatabase.ImportAsset(AudioMixerPath);
+                return;
+            }
+            throw new InvalidOperationException("Unity AudioMixer factory API was not found.");
         }
 
         private static void ConfigurePlayer()

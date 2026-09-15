@@ -5,6 +5,7 @@ using CockroachFantasia.Networking;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
+using CockroachFantasia.Audio;
 
 namespace CockroachFantasia.UI
 {
@@ -31,6 +32,7 @@ namespace CockroachFantasia.UI
         private uint lastImpactSequence;
         private float emphasisUntil;
         private bool resultPresented;
+        private int lastCountdownSecond = -1;
 
         public int ResultsPresentationCount { get; private set; }
 
@@ -125,6 +127,10 @@ namespace CockroachFantasia.UI
                     _ => "0:00"
                 };
                 var urgent = game.Phase == MatchPhase.Playing && game.RemainingPlayingSeconds <= 10d;
+                var countdownSecond = urgent ? Mathf.CeilToInt((float)game.RemainingPlayingSeconds) : -1;
+                if (countdownSecond > 0 && countdownSecond != lastCountdownSecond)
+                    GameAudio.Play(GameAudioCue.CountdownTick);
+                lastCountdownSecond = countdownSecond;
                 timerLabel.color = urgent ? new Color(1f, 0.3f, 0.24f) : Color.white;
                 timerLabel.transform.localScale = urgent
                     ? Vector3.one * (1f + 0.08f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 7f)))
@@ -214,6 +220,9 @@ namespace CockroachFantasia.UI
                     ? camera.transform.position + camera.transform.forward * 1.4f
                     : (localPlayer != null ? localPlayer.transform.position + Vector3.up : Vector3.zero);
                 ComicVfx.SpawnBurst(origin, new Color(1f, 0.75f, 0.2f), "TA-DA!");
+                GameAudio.Play(game.Winner == MatchWinner.Cockroaches
+                    ? GameAudioCue.CockroachVictory
+                    : GameAudioCue.HumanVictory);
             }
 
             var identity = localPlayer != null ? localPlayer.GetComponent<NetworkRoleAvatar>() : null;

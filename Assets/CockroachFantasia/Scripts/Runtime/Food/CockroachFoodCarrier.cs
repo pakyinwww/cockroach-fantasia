@@ -9,6 +9,7 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using CockroachFantasia.UI;
+using CockroachFantasia.Audio;
 
 namespace CockroachFantasia.Food
 {
@@ -125,7 +126,11 @@ namespace CockroachFantasia.Food
         {
             if (!IsServer || !TryGetCarriedFood(out var food)) return false;
             var dropped = food.TryDropByServer(OwnerClientId, ResolveFloorPosition());
-            if (dropped) carriedFoodNetworkId.Value = NoFood;
+            if (dropped)
+            {
+                carriedFoodNetworkId.Value = NoFood;
+                PlayFoodCueRpc(GameAudioCue.Drop, transform.position);
+            }
             return dropped;
         }
 
@@ -168,6 +173,7 @@ namespace CockroachFantasia.Food
             // lifecycle immediately, so simultaneous requests yield one winner.
             if (!food.TryClaimByServer(OwnerClientId)) return;
             carriedFoodNetworkId.Value = targetObject.NetworkObjectId;
+            PlayFoodCueRpc(GameAudioCue.Pickup, transform.position);
             if (Debug.isDebugBuild && Environment.GetCommandLineArgs().Contains("-foodDepositSmoke"))
                 StartCoroutine(DepositAfterDiagnosticDelay());
         }
@@ -213,6 +219,12 @@ namespace CockroachFantasia.Food
         private void OnCarriedFoodChanged(ulong previous, ulong current)
         {
             RefreshCarriedPresentation();
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void PlayFoodCueRpc(GameAudioCue cue, Vector3 position)
+        {
+            GameAudio.Play(cue, position);
         }
 
         private void RefreshCarriedPresentation()
