@@ -9,9 +9,9 @@ namespace CockroachFantasia.Food
         public const ulong NoCarrier = ulong.MaxValue;
 
         [SerializeField] private FoodDefinition definition;
-        private NetworkVariable<FoodSize> size;
-        private NetworkVariable<FoodLifecycleState> lifecycle;
-        private NetworkVariable<ulong> carrierClientId;
+        private readonly NetworkVariable<FoodSize> size = new();
+        private readonly NetworkVariable<FoodLifecycleState> lifecycle = new();
+        private readonly NetworkVariable<ulong> carrierClientId = new(NoCarrier);
 
         public FoodDefinition Definition => definition;
         public FoodSize Size => size.Value;
@@ -21,21 +21,6 @@ namespace CockroachFantasia.Food
         public void Configure(FoodDefinition foodDefinition)
         {
             definition = foodDefinition;
-        }
-
-        public void InitializeBeforeSpawn()
-        {
-            if (NetworkObject.IsSpawned || definition == null) return;
-            size.Value = definition.Size;
-            lifecycle.Value = FoodLifecycleState.World;
-            carrierClientId.Value = NoCarrier;
-        }
-
-        private void Awake()
-        {
-            size ??= new NetworkVariable<FoodSize>();
-            lifecycle ??= new NetworkVariable<FoodLifecycleState>();
-            carrierClientId ??= new NetworkVariable<ulong>(NoCarrier);
         }
 
         public override void OnNetworkSpawn()
@@ -50,7 +35,9 @@ namespace CockroachFantasia.Food
                 return;
             }
 
-            InitializeBeforeSpawn();
+            size.Value = definition.Size;
+            lifecycle.Value = FoodLifecycleState.World;
+            carrierClientId.Value = NoCarrier;
         }
 
         public override void OnNetworkDespawn()

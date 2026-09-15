@@ -9,8 +9,9 @@ namespace CockroachFantasia.Networking
         private readonly NetworkVariable<LobbySeat> seat = new();
         public LobbySeat Seat => seat.Value;
 
-        public void InitializeBeforeSpawn(LobbySeat assignedSeat)
+        public void AssignSeatByServer(LobbySeat assignedSeat)
         {
+            if (!IsSpawned || !IsServer) return;
             seat.Value = assignedSeat;
         }
     }

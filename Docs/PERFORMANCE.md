@@ -56,8 +56,13 @@ the stricter Ultra default. It held 16.67 ms average and 17.19 ms maximum frame 
 completed three result/rematch cycles, retained one camera/listener, and showed 16 KiB managed-memory
 growth. One warmup frame allocated 113,449 bytes; steady frames stayed within the harness budget.
 
-That capture exposed repeated NGO warnings from constructing the avatar seat `NetworkVariable` in
-`Awake` and assigning it before spawn. The variable now initializes at field construction so NGO can
-discover it before the pre-spawn assignment. A clean rebuilt-player capture is still required after
-Unity licensing is available, along with representative minimum-tier hardware; the faster RTX 5060
-workstation does not by itself certify the documented GTX 1660/RX 590 tier.
+That first capture exposed repeated NGO warnings from assigning avatar and food `NetworkVariable`s
+before their `NetworkObject`s were spawned. Avatar seats are now assigned immediately after the player
+spawn, and food initializes its authoritative state in server `OnNetworkSpawn`.
+
+The rebuilt Medium-default player then passed 43/43 EditMode and 20/20 PlayMode tests. Its clean
+four-peer rendered rerun held 16.67 ms average / 16.95 ms maximum frame time, allocated at most 344
+bytes in sampled rendered frames, completed three rematches, retained one camera/listener, and showed
+24,576 bytes host managed-memory growth. All peers exited 0 and the prior NGO warnings were absent.
+Representative minimum-tier hardware is still required; the faster RTX 5060 workstation does not by
+itself certify the documented GTX 1660/RX 590 tier.

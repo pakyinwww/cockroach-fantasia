@@ -37,8 +37,8 @@ namespace CockroachFantasia.Networking
                 }
 
                 var avatarObject = Instantiate(prefab, marker.transform.position, marker.transform.rotation);
-                avatarObject.GetComponent<NetworkRoleAvatar>().InitializeBeforeSpawn(entry.Seat);
                 avatarObject.GetComponent<NetworkObject>().SpawnAsPlayerObject(entry.ClientId, true);
+                avatarObject.GetComponent<NetworkRoleAvatar>().AssignSeatByServer(entry.Seat);
             }
         }
     }
