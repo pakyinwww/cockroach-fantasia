@@ -7,7 +7,7 @@
 | Minimum test PC | 4-core CPU, 8 GB RAM, GTX 1050 / RX 560 class GPU | 1280x800, Low | Stable 45 FPS |
 | Recommended test PC | 6-core CPU, 16 GB RAM, GTX 1660 / RX 590 class GPU | 1920x1080, Medium | Stable 60 FPS |
 
-The standalone player targets 60 FPS. Medium is the recommended assumption: one shadow-casting key
+The standalone player targets 60 FPS and defaults to the Medium quality tier. Medium uses one shadow-casting key
 light, 30 Hz NGO simulation, interpolated owner-authoritative transforms, no real-time GI/reflections,
 and the single compact Kitchen. Low is the fallback for minimum hardware.
 
