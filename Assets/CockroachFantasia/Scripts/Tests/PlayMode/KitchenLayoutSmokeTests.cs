@@ -79,6 +79,13 @@ namespace CockroachFantasia.Tests.PlayMode
             Assert.That(results.Find("Rematch").GetComponent<UnityEngine.UI.Button>(), Is.Not.Null);
             Assert.That(results.Find("ReturnToMenu").GetComponent<UnityEngine.UI.Button>(), Is.Not.Null);
             Assert.That(results.Find("WaitingForHost"), Is.Not.Null);
+            var pause = matchHud.transform.Find("PauseOverlay");
+            Assert.That(pause, Is.Not.Null);
+            Assert.That(pause.Find("SettingsPanel/Sensitivity"), Is.Not.Null);
+            Assert.That(pause.Find("SettingsPanel/InvertY"), Is.Not.Null);
+            Assert.That(pause.Find("SettingsPanel/MasterVolume"), Is.Not.Null);
+            Assert.That(pause.Find("SettingsPanel/LeaveMatch"), Is.Not.Null);
+            Assert.That(pause.Find("LeaveConfirmation/ConfirmLeave"), Is.Not.Null);
             Assert.That(GameObject.Find("Huge_Mug").GetComponent<Collider>(), Is.Null);
             Assert.That(GameObject.Find("Fruit_Bowl").GetComponent<Collider>(), Is.Null);
 

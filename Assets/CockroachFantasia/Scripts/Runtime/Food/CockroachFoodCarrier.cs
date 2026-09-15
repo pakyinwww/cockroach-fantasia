@@ -8,6 +8,7 @@ using CockroachFantasia.World;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using CockroachFantasia.UI;
 
 namespace CockroachFantasia.Food
 {
@@ -54,7 +55,8 @@ namespace CockroachFantasia.Food
 
         private void Update()
         {
-            if (IsSpawned && IsOwner && motor.CanAcceptInput && Keyboard.current?.eKey.wasPressedThisFrame == true)
+            if (IsSpawned && IsOwner && motor.CanAcceptInput && !PauseMenuPresenter.IsAnyOpen &&
+                Keyboard.current?.eKey.wasPressedThisFrame == true)
                 RequestInteract();
             if (IsSpawned && renderedFoodId != carriedFoodNetworkId.Value)
                 RefreshCarriedPresentation();

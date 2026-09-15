@@ -239,7 +239,15 @@ namespace CockroachFantasia.Editor
                 }
 
                 CreateCameraAndLight(scene);
-                if (definition.Name == "Lobby")
+                if (definition.Name == "Bootstrap")
+                {
+                    CreateBootstrapInterface(scene);
+                }
+                else if (definition.Name == "FrontEnd")
+                {
+                    CreateFrontEndInterface(scene);
+                }
+                else if (definition.Name == "Lobby")
                 {
                     CreateLobbyInterface(scene);
                 }
@@ -263,6 +271,7 @@ namespace CockroachFantasia.Editor
                     EditorUtility.SetDirty(foodSpawner);
                     CreateKitchenLayout(scene);
                     CreateKitchenHud(scene);
+                    CreatePauseInterface(scene);
                 }
 
                 if (!sceneAlreadyExists || scene.isDirty)
@@ -588,6 +597,228 @@ namespace CockroachFantasia.Editor
             light.type = LightType.Directional;
             light.intensity = 1.2f;
             light.color = new Color(1f, 0.91f, 0.78f);
+        }
+
+        private static void CreateBootstrapInterface(Scene scene)
+        {
+            if (GameObject.Find("BootstrapCanvas") != null) return;
+            var canvasObject = CreateOverlayCanvas(scene, "BootstrapCanvas");
+            CreateText(canvasObject.transform, "Title", "COCKROACH FANTASIA", 58,
+                new Vector2(0.5f, 0.62f), new Vector2(1000f, 100f));
+            var status = CreateText(canvasObject.transform, "ServicesStatus", "Preparing online services…", 28,
+                new Vector2(0.5f, 0.48f), new Vector2(1000f, 80f));
+            var retry = CreateButton(canvasObject.transform, "Retry", new Vector2(0.5f, 0.35f),
+                new Vector2(320f, 76f), out var retryLabel);
+            retryLabel.text = "RETRY";
+            retry.gameObject.SetActive(false);
+            canvasObject.AddComponent<ServicesStatusPresenter>().Configure(status, retry);
+            canvasObject.AddComponent<ServicesSceneNavigator>();
+            EnsureEventSystem(scene);
+            EditorSceneManager.MarkSceneDirty(scene);
+        }
+
+        private static void CreateFrontEndInterface(Scene scene)
+        {
+            var existing = GameObject.Find("FrontEndCanvas");
+            if (existing != null && existing.GetComponent<SessionMenuPresenter>() != null &&
+                existing.transform.Find("SettingsPanel") != null) return;
+            if (existing != null) UnityEngine.Object.DestroyImmediate(existing);
+
+            var canvasObject = CreateOverlayCanvas(scene, "FrontEndCanvas");
+            CreateText(canvasObject.transform, "Title", "COCKROACH FANTASIA", 54,
+                new Vector2(0.5f, 0.9f), new Vector2(1000f, 90f));
+            CreateText(canvasObject.transform, "Subtitle", "One kitchen. One swatter. Three hungry pests.", 26,
+                new Vector2(0.5f, 0.83f), new Vector2(1000f, 54f));
+            var displayName = CreateInputField(canvasObject.transform, "DisplayName", "Display name",
+                new Vector2(0.5f, 0.72f), new Vector2(520f, 62f));
+            var roomCode = CreateInputField(canvasObject.transform, "RoomCodeInput", "ROOM CODE",
+                new Vector2(0.5f, 0.62f), new Vector2(520f, 62f));
+            roomCode.characterLimit = 12;
+            roomCode.contentType = InputField.ContentType.Alphanumeric;
+            var host = CreateButton(canvasObject.transform, "CreateRoom", new Vector2(0.38f, 0.5f),
+                new Vector2(340f, 78f), out var hostLabel);
+            hostLabel.text = "CREATE ROOM";
+            var join = CreateButton(canvasObject.transform, "JoinRoom", new Vector2(0.62f, 0.5f),
+                new Vector2(340f, 78f), out var joinLabel);
+            joinLabel.text = "JOIN ROOM";
+            var codeLabel = CreateText(canvasObject.transform, "RoomCode", "Room code: —", 30,
+                new Vector2(0.42f, 0.39f), new Vector2(620f, 60f));
+            var copy = CreateButton(canvasObject.transform, "CopyCode", new Vector2(0.68f, 0.39f),
+                new Vector2(220f, 60f), out var copyLabel);
+            copyLabel.text = "COPY CODE";
+            var players = CreateText(canvasObject.transform, "PlayerCount", "Players: 0/4", 24,
+                new Vector2(0.5f, 0.31f), new Vector2(400f, 48f));
+            var status = CreateText(canvasObject.transform, "Status", "Create a private room or enter a friend's code.", 24,
+                new Vector2(0.5f, 0.25f), new Vector2(1100f, 58f));
+            var lobby = CreateButton(canvasObject.transform, "OpenLobby", new Vector2(0.5f, 0.16f),
+                new Vector2(420f, 72f), out var lobbyLabel);
+            lobbyLabel.text = "OPEN ROLE LOBBY";
+            lobby.gameObject.SetActive(false);
+            var leave = CreateButton(canvasObject.transform, "LeaveRoom", new Vector2(0.36f, 0.07f),
+                new Vector2(250f, 58f), out var leaveLabel);
+            leaveLabel.text = "LEAVE ROOM";
+            var settings = CreateButton(canvasObject.transform, "Settings", new Vector2(0.5f, 0.07f),
+                new Vector2(250f, 58f), out var settingsLabel);
+            settingsLabel.text = "SETTINGS";
+            var quit = CreateButton(canvasObject.transform, "Quit", new Vector2(0.64f, 0.07f),
+                new Vector2(250f, 58f), out var quitLabel);
+            quitLabel.text = "QUIT";
+            var settingsPanel = CreateSettingsPanel(canvasObject.transform, settings, true);
+            settingsPanel.SetActive(false);
+            canvasObject.AddComponent<SessionMenuPresenter>().Configure(roomCode, displayName, codeLabel, status,
+                players, host, join, copy, leave, lobby, quit);
+            EnsureEventSystem(scene);
+            EditorSceneManager.MarkSceneDirty(scene);
+        }
+
+        private static void CreatePauseInterface(Scene scene)
+        {
+            var canvas = GameObject.Find("MatchHudCanvas");
+            if (canvas == null || canvas.transform.Find("PauseOverlay") != null) return;
+            var overlay = CreateFullScreenPanel(canvas.transform, "PauseOverlay");
+            var backdrop = overlay.AddComponent<Image>();
+            backdrop.color = new Color(0.04f, 0.02f, 0.015f, 0.94f);
+            CreateText(overlay.transform, "PauseTitle", "PAUSED — THE ONLINE MATCH CONTINUES", 38,
+                new Vector2(0.5f, 0.91f), new Vector2(1100f, 70f));
+            var settingsPanel = CreateSettingsPanel(overlay.transform, null, false);
+            var resume = CreateButton(settingsPanel.transform, "Resume", new Vector2(0.38f, 0.1f),
+                new Vector2(300f, 68f), out var resumeLabel);
+            resumeLabel.text = "RESUME";
+            var leave = CreateButton(settingsPanel.transform, "LeaveMatch", new Vector2(0.62f, 0.1f),
+                new Vector2(300f, 68f), out var leaveLabel);
+            leaveLabel.text = "LEAVE MATCH";
+            var confirmation = CreateFullScreenPanel(overlay.transform, "LeaveConfirmation");
+            confirmation.AddComponent<Image>().color = new Color(0.08f, 0.025f, 0.015f, 0.98f);
+            CreateText(confirmation.transform, "Question", "Leave this online match?", 38,
+                new Vector2(0.5f, 0.58f), new Vector2(800f, 80f));
+            var confirm = CreateButton(confirmation.transform, "ConfirmLeave", new Vector2(0.4f, 0.42f),
+                new Vector2(300f, 72f), out var confirmLabel);
+            confirmLabel.text = "YES, LEAVE";
+            var cancel = CreateButton(confirmation.transform, "CancelLeave", new Vector2(0.6f, 0.42f),
+                new Vector2(300f, 72f), out var cancelLabel);
+            cancelLabel.text = "STAY";
+            confirmation.SetActive(false);
+            canvas.AddComponent<PauseMenuPresenter>().Configure(overlay, confirmation, resume, leave, confirm, cancel);
+            overlay.SetActive(false);
+            EnsureEventSystem(scene);
+            EditorSceneManager.MarkSceneDirty(scene);
+        }
+
+        private static GameObject CreateOverlayCanvas(Scene scene, string name)
+        {
+            var canvasObject = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler),
+                typeof(GraphicRaycaster));
+            SceneManager.MoveGameObjectToScene(canvasObject, scene);
+            canvasObject.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+            return canvasObject;
+        }
+
+        private static void EnsureEventSystem(Scene scene)
+        {
+            if (UnityEngine.Object.FindFirstObjectByType<EventSystem>() != null) return;
+            var eventSystemObject = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+            SceneManager.MoveGameObjectToScene(eventSystemObject, scene);
+        }
+
+        private static GameObject CreateSettingsPanel(Transform parent, Button openButton, bool includeClose)
+        {
+            var panel = CreateFullScreenPanel(parent, "SettingsPanel");
+            panel.AddComponent<Image>().color = new Color(0.06f, 0.03f, 0.025f, 0.98f);
+            CreateText(panel.transform, "SettingsTitle", "SETTINGS", 44,
+                new Vector2(0.5f, 0.84f), new Vector2(700f, 70f));
+            CreateText(panel.transform, "SensitivityLabel", "MOUSE SENSITIVITY", 24,
+                new Vector2(0.36f, 0.68f), new Vector2(360f, 50f));
+            var sensitivity = CreateSlider(panel.transform, "Sensitivity", new Vector2(0.56f, 0.68f),
+                new Vector2(440f, 42f), 0.01f, 1f);
+            var sensitivityValue = CreateText(panel.transform, "SensitivityValue", "0.12", 22,
+                new Vector2(0.72f, 0.68f), new Vector2(120f, 44f));
+            CreateText(panel.transform, "InvertLabel", "INVERT Y", 24,
+                new Vector2(0.4f, 0.57f), new Vector2(260f, 50f));
+            var invert = CreateToggle(panel.transform, "InvertY", new Vector2(0.62f, 0.57f));
+            CreateText(panel.transform, "VolumeLabel", "MASTER VOLUME", 24,
+                new Vector2(0.36f, 0.46f), new Vector2(360f, 50f));
+            var volume = CreateSlider(panel.transform, "MasterVolume", new Vector2(0.56f, 0.46f),
+                new Vector2(440f, 42f), 0f, 1f);
+            var volumeValue = CreateText(panel.transform, "VolumeValue", "100%", 22,
+                new Vector2(0.72f, 0.46f), new Vector2(120f, 44f));
+            CreateText(panel.transform, "WindowLabel", "FULLSCREEN WINDOW", 24,
+                new Vector2(0.4f, 0.35f), new Vector2(340f, 50f));
+            var fullscreen = CreateToggle(panel.transform, "Fullscreen", new Vector2(0.62f, 0.35f));
+            CreateText(panel.transform, "ResolutionLabel", "RESOLUTION", 24,
+                new Vector2(0.39f, 0.24f), new Vector2(300f, 50f));
+            var resolution = CreateDropdown(panel.transform, "Resolution", new Vector2(0.59f, 0.24f),
+                new Vector2(360f, 54f));
+            Button close = null;
+            if (includeClose)
+            {
+                close = CreateButton(panel.transform, "CloseSettings", new Vector2(0.5f, 0.1f),
+                    new Vector2(300f, 68f), out var closeLabel);
+                closeLabel.text = "DONE";
+            }
+            var settingsOwner = openButton != null ? parent.gameObject : panel;
+            settingsOwner.AddComponent<SettingsMenuPresenter>().Configure(sensitivity, sensitivityValue, invert, volume,
+                volumeValue, fullscreen, resolution, panel, openButton, close);
+            return panel;
+        }
+
+        private static Slider CreateSlider(Transform parent, string name, Vector2 anchor, Vector2 size,
+            float minimum, float maximum)
+        {
+            var root = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Slider));
+            root.transform.SetParent(parent, false);
+            var rect = root.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = anchor;
+            rect.sizeDelta = size;
+            root.GetComponent<Image>().color = new Color(0.18f, 0.12f, 0.1f, 1f);
+            var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fill.transform.SetParent(root.transform, false);
+            var fillRect = fill.GetComponent<RectTransform>();
+            fillRect.anchorMin = new Vector2(0f, 0.2f);
+            fillRect.anchorMax = new Vector2(1f, 0.8f);
+            fillRect.offsetMin = fillRect.offsetMax = Vector2.zero;
+            fill.GetComponent<Image>().color = new Color(0.95f, 0.48f, 0.28f);
+            var handle = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+            handle.transform.SetParent(root.transform, false);
+            handle.GetComponent<RectTransform>().sizeDelta = new Vector2(30f, size.y + 8f);
+            handle.GetComponent<Image>().color = new Color(1f, 0.95f, 0.82f);
+            var slider = root.GetComponent<Slider>();
+            slider.minValue = minimum;
+            slider.maxValue = maximum;
+            slider.fillRect = fillRect;
+            slider.handleRect = handle.GetComponent<RectTransform>();
+            slider.targetGraphic = handle.GetComponent<Image>();
+            return slider;
+        }
+
+        private static Toggle CreateToggle(Transform parent, string name, Vector2 anchor)
+        {
+            var root = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Toggle));
+            root.transform.SetParent(parent, false);
+            var rect = root.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = anchor;
+            rect.sizeDelta = new Vector2(52f, 52f);
+            var background = root.GetComponent<Image>();
+            background.color = new Color(0.18f, 0.12f, 0.1f, 1f);
+            var check = CreateText(root.transform, "Checkmark", "✓", 34, new Vector2(0.5f, 0.5f), rect.sizeDelta);
+            var toggle = root.GetComponent<Toggle>();
+            toggle.targetGraphic = background;
+            toggle.graphic = check;
+            return toggle;
+        }
+
+        private static Dropdown CreateDropdown(Transform parent, string name, Vector2 anchor, Vector2 size)
+        {
+            var root = DefaultControls.CreateDropdown(new DefaultControls.Resources());
+            root.name = name;
+            root.transform.SetParent(parent, false);
+            var rect = root.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = anchor;
+            rect.sizeDelta = size;
+            return root.GetComponent<Dropdown>();
         }
 
         private static void CreateLobbyInterface(Scene scene)

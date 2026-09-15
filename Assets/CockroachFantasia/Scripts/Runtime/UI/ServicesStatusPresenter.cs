@@ -12,6 +12,12 @@ namespace CockroachFantasia.UI
 
         private CancellationTokenSource cancellation;
 
+        public void Configure(Text status, Button retry)
+        {
+            statusLabel = status;
+            retryButton = retry;
+        }
+
         private void OnEnable()
         {
             cancellation = new CancellationTokenSource();
@@ -22,6 +28,7 @@ namespace CockroachFantasia.UI
             }
 
             ServicesBootstrap.Instance.StatusChanged += HandleStatusChanged;
+            retryButton?.onClick.AddListener(Retry);
             Refresh();
         }
 
@@ -35,6 +42,7 @@ namespace CockroachFantasia.UI
             {
                 ServicesBootstrap.Instance.StatusChanged -= HandleStatusChanged;
             }
+            retryButton?.onClick.RemoveListener(Retry);
         }
 
         public async void Retry()

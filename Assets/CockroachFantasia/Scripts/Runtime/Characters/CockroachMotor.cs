@@ -3,6 +3,8 @@ using CockroachFantasia.World;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using CockroachFantasia.Settings;
+using CockroachFantasia.UI;
 
 namespace CockroachFantasia.Characters
 {
@@ -46,6 +48,8 @@ namespace CockroachFantasia.Characters
         public Camera OwnerCamera => ownerCamera;
         public float CurrentSpeedMultiplier => carrySpeedMultiplier;
         public float EffectiveSpeed => baseSpeed * carrySpeedMultiplier;
+        public float MouseSensitivity => mouseSensitivity;
+        public bool InvertPitch => invertPitch;
 
         public void Configure(Transform pivot, Camera localCamera, AudioListener listener, Transform socket)
         {
@@ -66,7 +70,11 @@ namespace CockroachFantasia.Characters
             SetLocalPresentation(IsOwner);
             matchPlaying = NetworkGameManager.Instance != null && NetworkGameManager.Instance.AcceptsGameplayRequests;
             cameraYaw = transform.eulerAngles.y;
-            if (IsOwner) Cursor.lockState = CursorLockMode.Locked;
+            if (IsOwner)
+            {
+                SetLookSettings(PlayerPreferences.MouseSensitivity, PlayerPreferences.InvertY);
+                Cursor.lockState = CursorLockMode.Locked;
+            }
         }
 
         public override void OnNetworkDespawn()
@@ -77,7 +85,7 @@ namespace CockroachFantasia.Characters
 
         private void Update()
         {
-            if (!IsSpawned || !IsOwner || !CanAcceptInput) return;
+            if (!IsSpawned || !IsOwner || !CanAcceptInput || PauseMenuPresenter.IsAnyOpen) return;
 
             var move = ReadMoveInput();
             var look = Mouse.current?.delta.ReadValue() ?? Vector2.zero;

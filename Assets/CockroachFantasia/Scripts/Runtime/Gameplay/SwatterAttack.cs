@@ -8,6 +8,7 @@ using CockroachFantasia.Networking;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using CockroachFantasia.UI;
 
 namespace CockroachFantasia.Gameplay
 {
@@ -45,7 +46,8 @@ namespace CockroachFantasia.Gameplay
         private void Update()
         {
             if (!IsSpawned || !IsOwner) return;
-            if (motor.CanAcceptInput && Mouse.current?.leftButton.wasPressedThisFrame == true)
+            if (motor.CanAcceptInput && !PauseMenuPresenter.IsAnyOpen &&
+                Mouse.current?.leftButton.wasPressedThisFrame == true)
                 RequestSwing();
             UpdateLocalSwingPresentation();
         }

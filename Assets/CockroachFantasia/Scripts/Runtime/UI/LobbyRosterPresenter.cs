@@ -3,6 +3,7 @@ using CockroachFantasia.Networking;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 namespace CockroachFantasia.UI
 {
@@ -51,6 +52,8 @@ namespace CockroachFantasia.UI
             displayNameInput?.onEndEdit.AddListener(SetDisplayName);
             readyButton?.onClick.AddListener(ToggleReady);
             startButton?.onClick.AddListener(StartMatch);
+            if (displayNameInput != null) displayNameInput.text = SessionIdentity.DisplayName;
+            EventSystem.current?.SetSelectedGameObject(displayNameInput?.gameObject ?? readyButton?.gameObject);
             TryBindRoster();
         }
 
@@ -97,6 +100,7 @@ namespace CockroachFantasia.UI
 
         private void SetDisplayName(string value)
         {
+            SessionIdentity.DisplayName = string.IsNullOrWhiteSpace(value) ? "Player" : value.Trim();
             roster?.SetLocalDisplayName(value);
         }
 
