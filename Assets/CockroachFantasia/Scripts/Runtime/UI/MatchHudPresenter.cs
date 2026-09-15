@@ -1,5 +1,6 @@
 using CockroachFantasia.Food;
 using CockroachFantasia.Gameplay;
+using CockroachFantasia.Networking;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,13 +19,24 @@ namespace CockroachFantasia.UI
         [SerializeField] private GameObject humanPanel;
         [SerializeField] private Text reticleLabel;
         [SerializeField] private Text swatterLabel;
+        [SerializeField] private GameObject resultsPanel;
+        [SerializeField] private Text resultsHeadlineLabel;
+        [SerializeField] private Text resultsDetailLabel;
+        [SerializeField] private Button rematchButton;
+        [SerializeField] private Button returnButton;
+        [SerializeField] private Text waitingForHostLabel;
 
         private int lastScore = -1;
         private uint lastImpactSequence;
         private float emphasisUntil;
+        private bool resultPresented;
+
+        public int ResultsPresentationCount { get; private set; }
 
         public void Configure(Text timer, Text score, Text announcement, GameObject roachPanel,
-            Text carry, Text roachPrompt, Text respawn, GameObject humanHud, Text reticle, Text swatter)
+            Text carry, Text roachPrompt, Text respawn, GameObject humanHud, Text reticle, Text swatter,
+            GameObject results, Text resultsHeadline, Text resultsDetail, Button rematch, Button returnToMenu,
+            Text waitingForHost)
         {
             timerLabel = timer;
             scoreLabel = score;
@@ -36,6 +48,24 @@ namespace CockroachFantasia.UI
             humanPanel = humanHud;
             reticleLabel = reticle;
             swatterLabel = swatter;
+            resultsPanel = results;
+            resultsHeadlineLabel = resultsHeadline;
+            resultsDetailLabel = resultsDetail;
+            rematchButton = rematch;
+            returnButton = returnToMenu;
+            waitingForHostLabel = waitingForHost;
+        }
+
+        private void OnEnable()
+        {
+            rematchButton?.onClick.AddListener(RequestRematch);
+            returnButton?.onClick.AddListener(RequestReturnToMenu);
+        }
+
+        private void OnDisable()
+        {
+            rematchButton?.onClick.RemoveListener(RequestRematch);
+            returnButton?.onClick.RemoveListener(RequestReturnToMenu);
         }
 
         private void Update()
@@ -49,6 +79,14 @@ namespace CockroachFantasia.UI
 
             RefreshCommon(game);
             var localPlayer = NetworkManager.Singleton?.LocalClient?.PlayerObject;
+            if (game.Phase == MatchPhase.Results)
+            {
+                ShowResults(game, localPlayer);
+                return;
+            }
+
+            resultPresented = false;
+            resultsPanel?.SetActive(false);
             var carrier = localPlayer != null ? localPlayer.GetComponent<CockroachFoodCarrier>() : null;
             var respawn = localPlayer != null ? localPlayer.GetComponent<CockroachRespawn>() : null;
             var swatter = localPlayer != null ? localPlayer.GetComponent<SwatterAttack>() : null;
@@ -155,6 +193,44 @@ namespace CockroachFantasia.UI
             if (scoreLabel != null) scoreLabel.text = "FOOD  0 / 12";
             cockroachPanel?.SetActive(false);
             humanPanel?.SetActive(false);
+            resultsPanel?.SetActive(false);
+        }
+
+        private void ShowResults(NetworkGameManager game, NetworkObject localPlayer)
+        {
+            cockroachPanel?.SetActive(false);
+            humanPanel?.SetActive(false);
+            resultsPanel?.SetActive(true);
+            if (!resultPresented)
+            {
+                resultPresented = true;
+                ResultsPresentationCount++;
+            }
+
+            var identity = localPlayer != null ? localPlayer.GetComponent<NetworkRoleAvatar>() : null;
+            var role = identity != null && identity.Seat == LobbySeat.Human
+                ? PlayerRole.Human
+                : PlayerRole.Cockroach;
+            if (resultsHeadlineLabel != null)
+                resultsHeadlineLabel.text = MatchResultsFormatter.Headline(game.Winner);
+            if (resultsDetailLabel != null)
+                resultsDetailLabel.text = $"{MatchResultsFormatter.RoleOutcome(game.Winner, role)}\n" +
+                                          $"FINAL FOOD  {game.DepositedPoints} / {game.Rules.FoodQuotaPoints}";
+
+            var isHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+            if (rematchButton != null) rematchButton.gameObject.SetActive(isHost);
+            if (returnButton != null) returnButton.gameObject.SetActive(isHost);
+            if (waitingForHostLabel != null) waitingForHostLabel.gameObject.SetActive(!isHost);
+        }
+
+        private static void RequestRematch()
+        {
+            NetworkRoster.Instance?.RequestRematch();
+        }
+
+        private static void RequestReturnToMenu()
+        {
+            NetworkRoster.Instance?.RequestReturnToMenu();
         }
 
         private static bool TryResolveFood(ulong networkId, out FoodItem food)

@@ -53,6 +53,13 @@ namespace CockroachFantasia.Gameplay
             return true;
         }
 
+        public bool FinishForDiagnostics(MatchWinner diagnosticWinner)
+        {
+            if (Phase != MatchPhase.Playing || diagnosticWinner == MatchWinner.None) return false;
+            Finish(diagnosticWinner);
+            return true;
+        }
+
         private void ResolvePlaying(double serverTime)
         {
             if (DepositedPoints >= quotaPoints)

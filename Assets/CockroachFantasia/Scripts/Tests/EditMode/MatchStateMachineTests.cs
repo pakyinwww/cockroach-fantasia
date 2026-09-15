@@ -66,5 +66,18 @@ namespace CockroachFantasia.Tests.EditMode
             Assert.That(MatchClock.RemainingSeconds(sharedDeadline, 200.25d), Is.EqualTo(52.75d));
             Assert.That(MatchClock.RemainingSeconds(sharedDeadline, 253.5d), Is.Zero);
         }
+
+        [Test]
+        public void DiagnosticFinishResolvesOnceAndOnlyWhilePlaying()
+        {
+            var match = new MatchStateMachine(240d, 12, 0d);
+            Assert.That(match.FinishForDiagnostics(MatchWinner.Human), Is.False);
+            match.BeginCountdown(0d);
+            match.Tick(0d);
+            Assert.That(match.FinishForDiagnostics(MatchWinner.Cockroaches), Is.True);
+            Assert.That(match.Winner, Is.EqualTo(MatchWinner.Cockroaches));
+            Assert.That(match.FinishForDiagnostics(MatchWinner.Human), Is.False);
+            Assert.That(match.Winner, Is.EqualTo(MatchWinner.Cockroaches));
+        }
     }
 }

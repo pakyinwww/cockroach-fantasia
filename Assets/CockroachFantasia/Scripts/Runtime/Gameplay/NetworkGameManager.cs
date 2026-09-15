@@ -95,6 +95,17 @@ namespace CockroachFantasia.Gameplay
             return accepted;
         }
 
+        public bool FinishForDiagnosticsByServer(MatchWinner diagnosticWinner)
+        {
+            if (!IsServer || !Debug.isDebugBuild || stateMachine == null ||
+                !Array.Exists(Environment.GetCommandLineArgs(), argument =>
+                    string.Equals(argument, "-resultsRematchSmoke", StringComparison.OrdinalIgnoreCase)))
+                return false;
+            var accepted = stateMachine.FinishForDiagnostics(diagnosticWinner);
+            if (accepted) PublishState();
+            return accepted;
+        }
+
         private void PublishState()
         {
             phase.Value = stateMachine.Phase;

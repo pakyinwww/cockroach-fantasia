@@ -222,6 +222,13 @@ namespace CockroachFantasia.Networking
                     await RunHudSmokeAsync(requestedSeat);
                 }
 
+                if (arguments.Contains("-resultsRematchSmoke"))
+                {
+                    await RunResultsRematchSmokeAsync(roster, localId, requestedSeat, expectedPlayers);
+                    Application.Quit(0);
+                    return;
+                }
+
                 var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
                 while (Time.realtimeSinceStartupAsDouble < end)
                 {
@@ -271,6 +278,93 @@ namespace CockroachFantasia.Networking
             }
             Debug.Log($"HUD_DIAGNOSTIC role={requestedSeat} timer={timer} score={score} " +
                       $"roachPanel={roachPanel.activeSelf} humanPanel={humanPanel.activeSelf}");
+        }
+
+        private static async Task RunResultsRematchSmokeAsync(NetworkRoster roster, ulong localId,
+            LobbySeat requestedSeat, int expectedPlayers)
+        {
+            var expectedListeners = -1;
+            for (var cycle = 1; cycle <= 3; cycle++)
+            {
+                await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "Kitchen" &&
+                                           NetworkGameManager.Instance != null &&
+                                           NetworkGameManager.Instance.AcceptsGameplayRequests,
+                    TimeSpan.FromSeconds(30), $"playing cycle {cycle}");
+                await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<NetworkRoleAvatar>(
+                        FindObjectsSortMode.None).Length == expectedPlayers &&
+                                           UnityEngine.Object.FindObjectsByType<FoodItem>(
+                                               FindObjectsSortMode.None).Length == 9,
+                    TimeSpan.FromSeconds(20), $"fresh cycle {cycle} objects");
+
+                var listenerCount = UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None)
+                    .Count(listener => listener.enabled);
+                if (expectedListeners < 0) expectedListeners = listenerCount;
+                if (listenerCount != expectedListeners ||
+                    UnityEngine.Object.FindObjectsByType<NetworkGameManager>(FindObjectsSortMode.None).Length != 1)
+                    throw new InvalidOperationException("A rematch created duplicate managers or audio listeners.");
+
+                // Give every peer's runner time to observe Playing before the host
+                // intentionally resolves this otherwise four-minute match.
+                await Task.Delay(1000);
+
+                if (NetworkManager.Singleton.IsHost &&
+                    !NetworkGameManager.Instance.FinishForDiagnosticsByServer(MatchWinner.Cockroaches))
+                    throw new InvalidOperationException("Host could not finish the diagnostic match.");
+
+                await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                           NetworkGameManager.Instance.Phase == MatchPhase.Results,
+                    TimeSpan.FromSeconds(10), $"results cycle {cycle}");
+                await WaitUntilAsync(() =>
+                {
+                    var presenter = UnityEngine.Object.FindFirstObjectByType<CockroachFantasia.UI.MatchHudPresenter>();
+                    return presenter != null && presenter.ResultsPresentationCount == 1 &&
+                           presenter.transform.Find("ResultsPanel").gameObject.activeSelf;
+                }, TimeSpan.FromSeconds(5), $"results presentation cycle {cycle}");
+
+                var game = NetworkGameManager.Instance;
+                var hud = UnityEngine.Object.FindFirstObjectByType<CockroachFantasia.UI.MatchHudPresenter>();
+                var detail = hud.transform.Find("ResultsPanel/ResultsDetail").GetComponent<UnityEngine.UI.Text>().text;
+                if (game.Winner != MatchWinner.Cockroaches || game.DepositedPoints != 0 ||
+                    !detail.Contains("FINAL FOOD  0 / 12"))
+                    throw new InvalidOperationException("A peer displayed a different final result.");
+                Debug.Log($"RESULTS_DIAGNOSTIC cycle={cycle} winner={game.Winner} score=0/12 " +
+                          $"presentations={hud.ResultsPresentationCount} listeners={listenerCount}");
+
+                if (cycle == 3)
+                {
+                    // Keep the last results screen alive long enough for the
+                    // slowest Relay peer to assert it before FrontEnd loads.
+                    await Task.Delay(2000);
+                    break;
+                }
+                if (NetworkManager.Singleton.IsHost) roster.RequestRematch();
+                await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "Lobby" && !roster.IsLoading,
+                    TimeSpan.FromSeconds(30), $"rematch lobby cycle {cycle}");
+                await WaitUntilAsync(() => roster.Entries.Count == expectedPlayers &&
+                                           roster.TryGetEntry(localId, out var resetEntry) && !resetEntry.Ready &&
+                                           UnityEngine.Object.FindObjectsByType<FoodItem>(
+                                               FindObjectsSortMode.None).Length == 0,
+                    TimeSpan.FromSeconds(10), $"clean rematch state cycle {cycle}");
+
+                roster.SetLocalReady(true);
+                await WaitUntilAsync(() => roster.TryGetEntry(localId, out var entry) && entry.Ready,
+                    TimeSpan.FromSeconds(15), $"rematch ready cycle {cycle}");
+                if (NetworkManager.Singleton.IsHost)
+                {
+                    await WaitUntilAsync(() => roster.CanLocalHostStart, TimeSpan.FromSeconds(30),
+                        $"rematch start gate cycle {cycle}");
+                    roster.RequestStartMatch();
+                }
+            }
+
+            if (NetworkManager.Singleton.IsHost) roster.RequestReturnToMenu();
+            await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "FrontEnd",
+                TimeSpan.FromSeconds(30), "synchronized FrontEnd return");
+            await WaitUntilAsync(() => SessionCoordinator.Instance != null &&
+                                       SessionCoordinator.Instance.CurrentSession == null &&
+                                       (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening),
+                TimeSpan.FromSeconds(30), "clean Session leave");
+            Debug.Log($"RESULTS_REMATCH_DIAGNOSTIC_SUCCESS role={requestedSeat} cycles=3 sessionClean=true");
         }
 
         private static async Task RunSwatterSmokeAsync(LobbySeat requestedSeat, bool verifyRespawn)

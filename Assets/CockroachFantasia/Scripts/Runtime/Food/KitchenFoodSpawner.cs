@@ -42,7 +42,7 @@ namespace CockroachFantasia.Food
                 var food = Instantiate(entry.Definition.NetworkPrefab, marker.transform.position,
                     marker.transform.rotation);
                 food.GetComponent<FoodItem>().InitializeBeforeSpawn();
-                food.GetComponent<NetworkObject>().Spawn();
+                food.GetComponent<NetworkObject>().Spawn(destroyWithScene: true);
             }
         }
     }

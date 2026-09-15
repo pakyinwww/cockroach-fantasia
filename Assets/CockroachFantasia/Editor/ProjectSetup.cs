@@ -677,7 +677,8 @@ namespace CockroachFantasia.Editor
         private static void CreateKitchenHud(Scene scene)
         {
             var existing = GameObject.Find("MatchHudCanvas");
-            if (existing != null && existing.GetComponent<MatchHudPresenter>() != null) return;
+            if (existing != null && existing.GetComponent<MatchHudPresenter>() != null &&
+                existing.transform.Find("ResultsPanel") != null) return;
             if (existing != null) UnityEngine.Object.DestroyImmediate(existing);
 
             var canvasObject = new GameObject("MatchHudCanvas", typeof(RectTransform), typeof(Canvas),
@@ -710,8 +711,26 @@ namespace CockroachFantasia.Editor
             var swatter = CreateText(humanPanel.transform, "SwatterReadiness", "SWATTER READY", 28,
                 new Vector2(0.83f, 0.08f), new Vector2(360f, 54f));
 
+            var resultsPanel = CreateFullScreenPanel(canvasObject.transform, "ResultsPanel");
+            var resultsBackdrop = resultsPanel.AddComponent<Image>();
+            resultsBackdrop.color = new Color(0.08f, 0.025f, 0.015f, 0.92f);
+            var resultsHeadline = CreateText(resultsPanel.transform, "ResultsHeadline", "THE KITCHEN IS SAVED!", 58,
+                new Vector2(0.5f, 0.7f), new Vector2(1100f, 100f));
+            var resultsDetail = CreateText(resultsPanel.transform, "ResultsDetail", "FINAL FOOD  0 / 12", 30,
+                new Vector2(0.5f, 0.54f), new Vector2(900f, 120f));
+            var rematch = CreateButton(resultsPanel.transform, "Rematch", new Vector2(0.38f, 0.3f),
+                new Vector2(340f, 82f), out var rematchLabel);
+            rematchLabel.text = "REMATCH";
+            var returnToMenu = CreateButton(resultsPanel.transform, "ReturnToMenu", new Vector2(0.62f, 0.3f),
+                new Vector2(340f, 82f), out var returnLabel);
+            returnLabel.text = "RETURN TO MENU";
+            var waitingForHost = CreateText(resultsPanel.transform, "WaitingForHost", "WAITING FOR HOST…", 28,
+                new Vector2(0.5f, 0.3f), new Vector2(700f, 82f));
+            resultsPanel.SetActive(false);
+
             canvasObject.AddComponent<MatchHudPresenter>().Configure(timer, score, announcement, roachPanel,
-                carry, prompt, respawn, humanPanel, reticle, swatter);
+                carry, prompt, respawn, humanPanel, reticle, swatter, resultsPanel, resultsHeadline,
+                resultsDetail, rematch, returnToMenu, waitingForHost);
         }
 
         private static GameObject CreateFullScreenPanel(Transform parent, string name)

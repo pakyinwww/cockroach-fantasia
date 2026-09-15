@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CockroachFantasia.Gameplay;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
@@ -47,6 +48,7 @@ namespace CockroachFantasia.Networking
             entries.OnListChanged += OnEntriesChanged;
             locked.OnValueChanged += OnLockedChanged;
             loading.OnValueChanged += OnLoadingChanged;
+            NetworkManager.SceneManager.OnLoadEventCompleted += OnLoadEventCompleted;
 
             if (!IsServer)
             {
@@ -71,6 +73,8 @@ namespace CockroachFantasia.Networking
             {
                 NetworkManager.OnClientConnectedCallback -= OnClientConnected;
                 NetworkManager.OnClientDisconnectCallback -= OnClientDisconnected;
+                if (NetworkManager.SceneManager != null)
+                    NetworkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
             }
 
             if (instance == this)
@@ -97,6 +101,16 @@ namespace CockroachFantasia.Networking
         public void RequestStartMatch()
         {
             RequestStartMatchRpc();
+        }
+
+        public void RequestRematch()
+        {
+            RequestResultsActionRpc(false);
+        }
+
+        public void RequestReturnToMenu()
+        {
+            RequestResultsActionRpc(true);
         }
 
         public bool TryGetEntry(ulong clientId, out RosterEntry entry)
@@ -209,6 +223,27 @@ namespace CockroachFantasia.Networking
             BeginMatchStart(clientId);
         }
 
+        [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+        private void RequestResultsActionRpc(bool returnToMenu, RpcParams rpcParams = default)
+        {
+            var clientId = rpcParams.Receive.SenderClientId;
+            if (clientId != NetworkManager.ServerClientId)
+            {
+                ResolveLobbyActionRpc(false, new FixedString64Bytes("Only the host can choose what happens next."),
+                    RpcTarget.Single(clientId, RpcTargetUse.Temp));
+                return;
+            }
+
+            if (NetworkGameManager.Instance == null || NetworkGameManager.Instance.Phase != MatchPhase.Results)
+            {
+                ResolveLobbyActionRpc(false, new FixedString64Bytes("The match results are not ready."),
+                    RpcTarget.Single(clientId, RpcTargetUse.Temp));
+                return;
+            }
+
+            BeginResultsTransition(returnToMenu, clientId);
+        }
+
         [Rpc(SendTo.SpecifiedInParams)]
         private void ResolveSeatRequestRpc(bool accepted, FixedString64Bytes message, RpcParams rpcParams = default)
         {
@@ -287,6 +322,46 @@ namespace CockroachFantasia.Networking
                 RpcTarget.Single(requestingClientId, RpcTargetUse.Temp));
         }
 
+        private async void BeginResultsTransition(bool returnToMenu, ulong requestingClientId)
+        {
+            if (loading.Value) return;
+            loading.Value = true;
+            if (!returnToMenu)
+            {
+                for (var index = 0; index < entries.Count; index++)
+                {
+                    var entry = entries[index];
+                    entry.Ready = false;
+                    entries[index] = entry;
+                }
+
+                locked.Value = false;
+                if (SessionCoordinator.Instance == null ||
+                    !await SessionCoordinator.Instance.SetSessionLockedAsync(false))
+                {
+                    loading.Value = false;
+                    locked.Value = true;
+                    ResolveLobbyActionRpc(false, new FixedString64Bytes("The room could not be reopened."),
+                        RpcTarget.Single(requestingClientId, RpcTargetUse.Temp));
+                    return;
+                }
+            }
+
+            var targetScene = returnToMenu ? "FrontEnd" : "Lobby";
+            var status = NetworkManager.SceneManager.LoadScene(targetScene, LoadSceneMode.Single);
+            if (status != SceneEventProgressStatus.Started)
+            {
+                loading.Value = false;
+                ResolveLobbyActionRpc(false, new FixedString64Bytes($"{targetScene} could not be loaded."),
+                    RpcTarget.Single(requestingClientId, RpcTargetUse.Temp));
+                return;
+            }
+
+            ResolveLobbyActionRpc(true, new FixedString64Bytes(
+                    returnToMenu ? "Returning everyone to the menu…" : "Setting up the rematch lobby…"),
+                RpcTarget.Single(requestingClientId, RpcTargetUse.Temp));
+        }
+
         private async void AbortMatchStart(string message, ulong requestingClientId = ulong.MaxValue)
         {
             startAttempt++;
@@ -357,6 +432,40 @@ namespace CockroachFantasia.Networking
         private void OnLoadingChanged(bool previous, bool current)
         {
             Changed?.Invoke();
+        }
+
+        private void OnLoadEventCompleted(string sceneName, LoadSceneMode mode, List<ulong> clientsCompleted,
+            List<ulong> clientsTimedOut)
+        {
+            if (!IsServer || clientsTimedOut.Count > 0) return;
+            if (sceneName == "Kitchen")
+            {
+                sceneLoadRequested = false;
+                loading.Value = false;
+                return;
+            }
+
+            if (sceneName == "Lobby")
+            {
+                sceneLoadRequested = false;
+                loading.Value = false;
+                return;
+            }
+
+            if (sceneName == "FrontEnd")
+                LeaveSessionAfterReturnRpc();
+        }
+
+        [Rpc(SendTo.Everyone)]
+        private void LeaveSessionAfterReturnRpc()
+        {
+            _ = LeaveSessionAfterReturnAsync();
+        }
+
+        private static async Task LeaveSessionAfterReturnAsync()
+        {
+            if (SessionCoordinator.Instance != null)
+                await SessionCoordinator.Instance.LeaveAsync();
         }
 
         private static string SanitizeDisplayName(string displayName)

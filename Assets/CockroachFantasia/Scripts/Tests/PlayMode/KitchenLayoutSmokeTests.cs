@@ -72,6 +72,13 @@ namespace CockroachFantasia.Tests.PlayMode
             Assert.That(GameObject.Find("Score"), Is.Not.Null);
             Assert.That(matchHud.transform.Find("CockroachHud"), Is.Not.Null);
             Assert.That(matchHud.transform.Find("HumanHud"), Is.Not.Null);
+            var results = matchHud.transform.Find("ResultsPanel");
+            Assert.That(results, Is.Not.Null);
+            Assert.That(results.Find("ResultsHeadline"), Is.Not.Null);
+            Assert.That(results.Find("ResultsDetail"), Is.Not.Null);
+            Assert.That(results.Find("Rematch").GetComponent<UnityEngine.UI.Button>(), Is.Not.Null);
+            Assert.That(results.Find("ReturnToMenu").GetComponent<UnityEngine.UI.Button>(), Is.Not.Null);
+            Assert.That(results.Find("WaitingForHost"), Is.Not.Null);
             Assert.That(GameObject.Find("Huge_Mug").GetComponent<Collider>(), Is.Null);
             Assert.That(GameObject.Find("Fruit_Bowl").GetComponent<Collider>(), Is.Null);
 
