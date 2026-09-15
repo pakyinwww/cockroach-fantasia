@@ -14,6 +14,7 @@ namespace CockroachFantasia.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateWhenRequested()
         {
+            if (!Debug.isDebugBuild) return;
             if (!Environment.GetCommandLineArgs().Contains("-menuSmoke")) return;
             var runner = new GameObject(nameof(MenuDiagnosticCommandLineRunner));
             DontDestroyOnLoad(runner);

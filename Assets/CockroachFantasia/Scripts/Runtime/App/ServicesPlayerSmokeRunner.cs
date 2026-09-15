@@ -10,6 +10,7 @@ namespace CockroachFantasia.App
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateWhenRequested()
         {
+            if (!Debug.isDebugBuild) return;
             if (!Array.Exists(
                     Environment.GetCommandLineArgs(),
                     argument => string.Equals(argument, CommandLineSwitch, StringComparison.OrdinalIgnoreCase)))

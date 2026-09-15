@@ -38,6 +38,7 @@ namespace CockroachFantasia.Editor
         private const string FoodPrefabRoot = Root + "/Resources/Food";
         private const string FoodSpawnSetPath = FoodDataRoot + "/FixedKitchenFood.asset";
         private const string AudioMixerPath = Root + "/Resources/Audio/CockroachMixer.mixer";
+        private const string ReleaseVersion = "0.1.0-rc.1";
 
         private static readonly (string Name, string Purpose)[] Scenes =
         {
@@ -81,22 +82,41 @@ namespace CockroachFantasia.Editor
             try
             {
                 Run();
-                Directory.CreateDirectory("Builds/WindowsDevelopment");
-                var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
-                {
-                    scenes = Array.ConvertAll(EditorBuildSettings.scenes, item => item.path),
-                    locationPathName = "Builds/WindowsDevelopment/CockroachFantasia.exe",
-                    target = BuildTarget.StandaloneWindows64,
-                    options = BuildOptions.Development
-                });
-
-                EditorApplication.Exit(report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded ? 0 : 1);
+                EditorApplication.Exit(BuildWindows("WindowsDevelopment", BuildOptions.Development) ? 0 : 1);
             }
             catch (Exception exception)
             {
                 Debug.LogException(exception);
                 EditorApplication.Exit(1);
             }
+        }
+
+        public static void BuildWindowsRelease()
+        {
+            try
+            {
+                Run();
+                EditorApplication.Exit(BuildWindows("WindowsRelease", BuildOptions.CleanBuildCache) ? 0 : 1);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                EditorApplication.Exit(1);
+            }
+        }
+
+        private static bool BuildWindows(string outputFolder, BuildOptions options)
+        {
+            var directory = $"Builds/{outputFolder}";
+            Directory.CreateDirectory(directory);
+            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = Array.ConvertAll(EditorBuildSettings.scenes, item => item.path),
+                locationPathName = $"{directory}/CockroachFantasia.exe",
+                target = BuildTarget.StandaloneWindows64,
+                options = options
+            });
+            return report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded;
         }
 
         public static void CaptureKitchenPreviewBatch()
@@ -170,7 +190,7 @@ namespace CockroachFantasia.Editor
         {
             PlayerSettings.companyName = "Cockroach Fantasia";
             PlayerSettings.productName = "Cockroach Fantasia";
-            PlayerSettings.bundleVersion = "0.1.0";
+            PlayerSettings.bundleVersion = ReleaseVersion;
             PlayerSettings.defaultScreenWidth = 1920;
             PlayerSettings.defaultScreenHeight = 1080;
             PlayerSettings.fullScreenMode = FullScreenMode.FullScreenWindow;

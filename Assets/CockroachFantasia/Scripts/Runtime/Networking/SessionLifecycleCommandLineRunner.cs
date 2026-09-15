@@ -18,6 +18,7 @@ namespace CockroachFantasia.Networking
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateWhenRequested()
         {
+            if (!Debug.isDebugBuild) return;
             var arguments = Environment.GetCommandLineArgs();
             if (!arguments.Contains(HostSwitch) && !arguments.Contains(RejectSwitch) &&
                 !arguments.Contains(RejoinSwitch) && !arguments.Contains(HostLossSwitch))
