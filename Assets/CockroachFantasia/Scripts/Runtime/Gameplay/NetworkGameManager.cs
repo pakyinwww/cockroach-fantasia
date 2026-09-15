@@ -4,6 +4,7 @@ using CockroachFantasia.Characters;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using CockroachFantasia.UI;
 
 namespace CockroachFantasia.Gameplay
 {
@@ -104,6 +105,17 @@ namespace CockroachFantasia.Gameplay
             var accepted = stateMachine.FinishForDiagnostics(diagnosticWinner);
             if (accepted) PublishState();
             return accepted;
+        }
+
+        public void PlayDepositVfxByServer(Vector3 position, int points)
+        {
+            if (IsServer) PlayDepositVfxRpc(position, points);
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void PlayDepositVfxRpc(Vector3 position, int points)
+        {
+            ComicVfx.SpawnBurst(position + Vector3.up * 0.2f, new Color(0.55f, 1f, 0.38f), $"YUM! +{points}");
         }
 
         private void PublishState()

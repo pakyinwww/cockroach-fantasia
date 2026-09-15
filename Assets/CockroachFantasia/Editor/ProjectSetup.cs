@@ -270,6 +270,7 @@ namespace CockroachFantasia.Editor
                     foodSpawner.Configure(AssetDatabase.LoadAssetAtPath<FoodSpawnSet>(FoodSpawnSetPath));
                     EditorUtility.SetDirty(foodSpawner);
                     CreateKitchenLayout(scene);
+                    CreateKitchenArtDressing(scene);
                     CreateKitchenHud(scene);
                     CreatePauseInterface(scene);
                 }
@@ -372,6 +373,7 @@ namespace CockroachFantasia.Editor
             cockroachPrefab = EnsurePlayerNetworking(CockroachPlayerPath, 3.2f);
             cockroachPrefab = EnsureCockroachFoodCarrier(CockroachPlayerPath);
             cockroachPrefab = EnsureCockroachRespawn(CockroachPlayerPath);
+            cockroachPrefab = EnsureStylizedCockroach(CockroachPlayerPath);
 
             if (!prefabList.Contains(cockroachPrefab))
             {
@@ -423,6 +425,7 @@ namespace CockroachFantasia.Editor
             }
             humanPrefab = EnsurePlayerNetworking(HumanPlayerPath, 4.5f);
             humanPrefab = EnsureHumanSwatter(HumanPlayerPath);
+            humanPrefab = EnsureStylizedHuman(HumanPlayerPath);
 
             if (!prefabList.Contains(humanPrefab))
             {
@@ -494,6 +497,7 @@ namespace CockroachFantasia.Editor
             EditorUtility.SetDirty(definition);
             var contents = PrefabUtility.LoadPrefabContents(prefabPath);
             contents.GetComponent<FoodItem>().Configure(definition);
+            EnsureStylizedFoodDetails(contents, size);
             PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
             PrefabUtility.UnloadPrefabContents(contents);
             return definition;
@@ -574,6 +578,146 @@ namespace CockroachFantasia.Editor
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             PrefabUtility.UnloadPrefabContents(root);
             return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        }
+
+        private static GameObject EnsureStylizedCockroach(string prefabPath)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (asset.transform.Find("ArtRootV2") != null && asset.GetComponent<StylizedCharacterAnimator>() != null)
+                return asset;
+            var root = PrefabUtility.LoadPrefabContents(prefabPath);
+            var oldArt = root.transform.Find("ArtRoot");
+            var oldBody = oldArt != null ? oldArt.Find("GreyboxBody") : null;
+            if (oldBody != null) oldBody.SetParent(root.transform, false);
+            if (oldArt != null) UnityEngine.Object.DestroyImmediate(oldArt.gameObject);
+            var art = new GameObject("ArtRootV2").transform;
+            art.SetParent(root.transform, false);
+            var body = root.transform.Find("GreyboxBody");
+            if (body != null)
+            {
+                body.SetParent(art, false);
+                body.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial("RoachShell",
+                    new Color(0.34f, 0.12f, 0.08f));
+            }
+            var head = CreateVisualPrimitive(art, "Head", PrimitiveType.Sphere,
+                new Vector3(0f, 0.14f, 0.23f), new Vector3(0.22f, 0.1f, 0.18f),
+                new Color(0.42f, 0.16f, 0.08f));
+            CreateVisualPrimitive(head, "EyeLeft", PrimitiveType.Sphere, new Vector3(-0.24f, 0.18f, 0.48f),
+                Vector3.one * 0.22f, new Color(1f, 0.92f, 0.68f));
+            CreateVisualPrimitive(head, "EyeRight", PrimitiveType.Sphere, new Vector3(0.24f, 0.18f, 0.48f),
+                Vector3.one * 0.22f, new Color(1f, 0.92f, 0.68f));
+            var antennaLeft = CreateVisualPrimitive(art, "AntennaLeft", PrimitiveType.Cylinder,
+                new Vector3(-0.09f, 0.2f, 0.38f), new Vector3(0.018f, 0.18f, 0.018f),
+                new Color(0.22f, 0.06f, 0.04f), Quaternion.Euler(38f, -18f, 0f));
+            var antennaRight = CreateVisualPrimitive(art, "AntennaRight", PrimitiveType.Cylinder,
+                new Vector3(0.09f, 0.2f, 0.38f), new Vector3(0.018f, 0.18f, 0.018f),
+                new Color(0.22f, 0.06f, 0.04f), Quaternion.Euler(38f, 18f, 0f));
+            for (var index = 0; index < 3; index++)
+            {
+                var z = -0.16f + index * 0.16f;
+                CreateVisualPrimitive(art, $"LegLeft{index + 1}", PrimitiveType.Cylinder,
+                    new Vector3(-0.2f, 0.08f, z), new Vector3(0.018f, 0.16f, 0.018f),
+                    new Color(0.18f, 0.05f, 0.035f), Quaternion.Euler(0f, 0f, 64f));
+                CreateVisualPrimitive(art, $"LegRight{index + 1}", PrimitiveType.Cylinder,
+                    new Vector3(0.2f, 0.08f, z), new Vector3(0.018f, 0.16f, 0.018f),
+                    new Color(0.18f, 0.05f, 0.035f), Quaternion.Euler(0f, 0f, -64f));
+            }
+            var animator = root.GetComponent<StylizedCharacterAnimator>() ??
+                           root.AddComponent<StylizedCharacterAnimator>();
+            animator.Configure(art, antennaLeft, antennaRight);
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            PrefabUtility.UnloadPrefabContents(root);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        }
+
+        private static GameObject EnsureStylizedHuman(string prefabPath)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (asset.transform.Find("ArtRootV2") != null && asset.GetComponent<StylizedCharacterAnimator>() != null)
+                return asset;
+            var root = PrefabUtility.LoadPrefabContents(prefabPath);
+            var oldArt = root.transform.Find("ArtRoot");
+            var oldBody = oldArt != null ? oldArt.Find("GreyboxBody") : null;
+            if (oldBody != null) oldBody.SetParent(root.transform, false);
+            if (oldArt != null) UnityEngine.Object.DestroyImmediate(oldArt.gameObject);
+            var art = new GameObject("ArtRootV2").transform;
+            art.SetParent(root.transform, false);
+            var body = root.transform.Find("GreyboxBody");
+            if (body != null)
+            {
+                body.SetParent(art, false);
+                body.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial("HumanApron",
+                    new Color(0.2f, 0.68f, 0.82f));
+            }
+            CreateVisualPrimitive(art, "Head", PrimitiveType.Sphere, new Vector3(0f, 1.62f, 0f),
+                new Vector3(0.5f, 0.52f, 0.5f), new Color(1f, 0.72f, 0.48f));
+            CreateVisualPrimitive(art, "Apron", PrimitiveType.Cube, new Vector3(0f, 0.92f, 0.37f),
+                new Vector3(0.52f, 0.72f, 0.06f), new Color(1f, 0.82f, 0.28f));
+            CreateVisualPrimitive(art, "ArmLeft", PrimitiveType.Capsule, new Vector3(-0.48f, 1.05f, 0f),
+                new Vector3(0.18f, 0.48f, 0.18f), new Color(1f, 0.66f, 0.43f),
+                Quaternion.Euler(0f, 0f, -12f));
+            CreateVisualPrimitive(art, "ArmRight", PrimitiveType.Capsule, new Vector3(0.48f, 1.05f, 0f),
+                new Vector3(0.18f, 0.48f, 0.18f), new Color(1f, 0.66f, 0.43f),
+                Quaternion.Euler(0f, 0f, 12f));
+            var animator = root.GetComponent<StylizedCharacterAnimator>() ??
+                           root.AddComponent<StylizedCharacterAnimator>();
+            animator.Configure(art);
+            var swatter = root.transform.Find("ViewPivot/SwatterSocket/SwatterVisual");
+            if (swatter != null && swatter.Find("FoamPad") == null)
+                CreateVisualPrimitive(swatter, "FoamPad", PrimitiveType.Sphere,
+                    new Vector3(0f, 0f, 0.62f), new Vector3(0.48f, 0.08f, 0.52f),
+                    new Color(1f, 0.28f, 0.5f));
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            PrefabUtility.UnloadPrefabContents(root);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        }
+
+        private static void EnsureStylizedFoodDetails(GameObject root, FoodSize size)
+        {
+            if (root.transform.Find("FoodArtDetailsV2") != null) return;
+            var oldDetails = root.transform.Find("FoodArtDetails");
+            if (oldDetails != null) UnityEngine.Object.DestroyImmediate(oldDetails.gameObject);
+            var details = new GameObject("FoodArtDetailsV2").transform;
+            details.SetParent(root.transform, false);
+            if (size == FoodSize.Small)
+            {
+                for (var index = 0; index < 4; index++)
+                    CreateVisualPrimitive(details, $"Crumb{index + 1}", PrimitiveType.Sphere,
+                        new Vector3(-0.28f + index * 0.18f, 0.52f, (index % 2 == 0 ? -1f : 1f) * 0.24f),
+                        Vector3.one * 0.09f, new Color(0.35f, 0.16f, 0.05f));
+            }
+            else if (size == FoodSize.Medium)
+            {
+                CreateVisualPrimitive(details, "CheeseHoleFront", PrimitiveType.Sphere,
+                    new Vector3(-0.24f, 0.05f, 0.52f), Vector3.one * 0.16f, new Color(0.72f, 0.35f, 0.04f));
+                CreateVisualPrimitive(details, "CheeseHoleTop", PrimitiveType.Sphere,
+                    new Vector3(0.22f, 0.52f, -0.1f), Vector3.one * 0.13f, new Color(0.72f, 0.35f, 0.04f));
+            }
+            else
+            {
+                for (var index = 0; index < 10; index++)
+                {
+                    var angle = index * Mathf.PI * 2f / 10f;
+                    CreateVisualPrimitive(details, $"Icing{index + 1}", PrimitiveType.Sphere,
+                        new Vector3(Mathf.Cos(angle) * 0.5f, 0.42f, Mathf.Sin(angle) * 0.5f),
+                        new Vector3(0.22f, 0.1f, 0.22f), new Color(1f, 0.58f, 0.72f));
+                }
+            }
+        }
+
+        private static Transform CreateVisualPrimitive(Transform parent, string name, PrimitiveType type,
+            Vector3 localPosition, Vector3 localScale, Color color, Quaternion? localRotation = null)
+        {
+            var item = GameObject.CreatePrimitive(type);
+            item.name = name;
+            item.transform.SetParent(parent, false);
+            item.transform.localPosition = localPosition;
+            item.transform.localScale = localScale;
+            item.transform.localRotation = localRotation ?? Quaternion.identity;
+            UnityEngine.Object.DestroyImmediate(item.GetComponent<Collider>());
+            item.GetComponent<Renderer>().sharedMaterial = GetGreyboxMaterial(
+                "Stylized_" + ColorUtility.ToHtmlStringRGB(color), color);
+            return item.transform;
         }
 
         private static void CreateCameraAndLight(Scene scene)
@@ -1132,6 +1276,30 @@ namespace CockroachFantasia.Editor
                 camera.transform.SetPositionAndRotation(new Vector3(0f, 12.5f, -15.5f), Quaternion.Euler(33f, 0f, 0f));
             }
 
+            EditorSceneManager.MarkSceneDirty(scene);
+        }
+
+        private static void CreateKitchenArtDressing(Scene scene)
+        {
+            if (GameObject.Find("StylizedKitchenDressingV2") != null) return;
+            var oldDressing = GameObject.Find("StylizedKitchenDressing");
+            if (oldDressing != null) UnityEngine.Object.DestroyImmediate(oldDressing);
+            var dressing = new GameObject("StylizedKitchenDressingV2");
+            SceneManager.MoveGameObjectToScene(dressing, scene);
+            var cream = new Color(1f, 0.78f, 0.48f);
+            var coral = new Color(0.95f, 0.32f, 0.3f);
+            for (var index = 0; index < 12; index++)
+            {
+                CreateVisualPrimitive(dressing.transform, $"BacksplashTile{index + 1}", PrimitiveType.Cube,
+                    new Vector3(-7.7f + index * 1.4f, 1.5f + (index % 2) * 0.72f, 6.78f),
+                    new Vector3(1.25f, 0.62f, 0.04f), index % 2 == 0 ? cream : coral);
+            }
+            for (var index = 0; index < 5; index++)
+            {
+                CreateVisualPrimitive(dressing.transform, $"CeilingConfetti{index + 1}", PrimitiveType.Sphere,
+                    new Vector3(-5f + index * 2.5f, 3.35f, -1.8f + (index % 2) * 3.6f),
+                    new Vector3(0.22f, 0.08f, 0.22f), index % 2 == 0 ? coral : cream);
+            }
             EditorSceneManager.MarkSceneDirty(scene);
         }
 

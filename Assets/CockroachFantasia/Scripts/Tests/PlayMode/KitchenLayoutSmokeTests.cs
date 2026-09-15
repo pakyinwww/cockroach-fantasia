@@ -88,6 +88,10 @@ namespace CockroachFantasia.Tests.PlayMode
             Assert.That(pause.Find("LeaveConfirmation/ConfirmLeave"), Is.Not.Null);
             Assert.That(GameObject.Find("Huge_Mug").GetComponent<Collider>(), Is.Null);
             Assert.That(GameObject.Find("Fruit_Bowl").GetComponent<Collider>(), Is.Null);
+            var dressing = GameObject.Find("StylizedKitchenDressingV2");
+            Assert.That(dressing, Is.Not.Null);
+            Assert.That(dressing.GetComponentsInChildren<Collider>(), Is.Empty,
+                "Decorative kitchen dressing must not change traversal collision.");
 
             var nestCeiling = GameObject.Find("Nest_Ceiling").transform;
             var clearance = nestCeiling.position.y - nestCeiling.localScale.y * 0.5f;

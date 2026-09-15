@@ -1,4 +1,5 @@
 using CockroachFantasia.Food;
+using CockroachFantasia.Characters;
 using CockroachFantasia.Gameplay;
 using CockroachFantasia.Networking;
 using Unity.Netcode;
@@ -205,6 +206,14 @@ namespace CockroachFantasia.UI
             {
                 resultPresented = true;
                 ResultsPresentationCount++;
+                var camera = localPlayer != null
+                    ? localPlayer.GetComponent<HumanMotor>()?.OwnerCamera ??
+                      localPlayer.GetComponent<CockroachMotor>()?.OwnerCamera
+                    : null;
+                var origin = camera != null
+                    ? camera.transform.position + camera.transform.forward * 1.4f
+                    : (localPlayer != null ? localPlayer.transform.position + Vector3.up : Vector3.zero);
+                ComicVfx.SpawnBurst(origin, new Color(1f, 0.75f, 0.2f), "TA-DA!");
             }
 
             var identity = localPlayer != null ? localPlayer.GetComponent<NetworkRoleAvatar>() : null;

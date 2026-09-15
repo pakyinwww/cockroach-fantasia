@@ -4,6 +4,7 @@ using CockroachFantasia.Characters;
 using CockroachFantasia.Food;
 using CockroachFantasia.Networking;
 using CockroachFantasia.World;
+using CockroachFantasia.UI;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -36,7 +37,7 @@ namespace CockroachFantasia.Gameplay
             motor = GetComponent<CockroachMotor>();
             carrier = GetComponent<CockroachFoodCarrier>();
             controller = GetComponent<CharacterController>();
-            body = transform.Find("GreyboxBody");
+            body = GetComponentsInChildren<Transform>(true).FirstOrDefault(item => item.name == "GreyboxBody");
             if (body != null) bodyRestScale = body.localScale;
         }
 
@@ -122,12 +123,10 @@ namespace CockroachFantasia.Gameplay
         private void CreatePuff()
         {
             ClearPuff();
-            puff = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            puff = ComicVfx.SpawnBurst(transform.position + Vector3.up * 0.18f,
+                new Color(0.82f, 0.72f, 1f), "SQUISH!");
             puff.name = "CartoonKnockoutPuff";
-            puff.transform.SetParent(transform, false);
-            puff.transform.localPosition = new Vector3(0f, 0.18f, 0f);
-            puff.transform.localScale = new Vector3(0.42f, 0.14f, 0.42f);
-            Destroy(puff.GetComponent<Collider>());
+            puff.transform.SetParent(transform, true);
         }
 
         private void ClearPuff()

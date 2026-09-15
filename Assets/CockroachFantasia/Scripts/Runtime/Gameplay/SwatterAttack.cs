@@ -132,12 +132,8 @@ namespace CockroachFantasia.Gameplay
         {
             ConfirmedImpactSequence = sequence;
             LastConfirmedHitCount = hitCount;
-            var flash = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            var flash = ComicVfx.SpawnBurst(position, new Color(1f, 0.35f, 0.2f), "WHOMP!");
             flash.name = "SwatterImpact";
-            flash.transform.position = position;
-            flash.transform.localScale = Vector3.one * (0.18f + 0.05f * hitCount);
-            Destroy(flash.GetComponent<Collider>());
-            Destroy(flash, 0.2f);
         }
 
         private void BeginLocalSwingPresentation()

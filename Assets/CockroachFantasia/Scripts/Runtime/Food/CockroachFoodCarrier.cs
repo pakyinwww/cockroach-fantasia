@@ -139,6 +139,7 @@ namespace CockroachFantasia.Food
             carriedFoodNetworkId.Value = NoFood;
             if (!game.TryDepositPointsByServer(points))
                 throw new InvalidOperationException("A validated food deposit was rejected by match state.");
+            game.PlayDepositVfxByServer(transform.position, points);
             food.NetworkObject.Despawn(true);
             return true;
         }

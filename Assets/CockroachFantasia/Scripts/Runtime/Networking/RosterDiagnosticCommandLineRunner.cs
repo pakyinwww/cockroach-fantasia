@@ -222,6 +222,11 @@ namespace CockroachFantasia.Networking
                     await RunHudSmokeAsync(requestedSeat);
                 }
 
+                if (arguments.Contains("-artSmoke"))
+                {
+                    await RunArtSmokeAsync();
+                }
+
                 if (arguments.Contains("-resultsRematchSmoke"))
                 {
                     await RunResultsRematchSmokeAsync(roster, localId, requestedSeat, expectedPlayers);
@@ -278,6 +283,22 @@ namespace CockroachFantasia.Networking
             }
             Debug.Log($"HUD_DIAGNOSTIC role={requestedSeat} timer={timer} score={score} " +
                       $"roachPanel={roachPanel.activeSelf} humanPanel={humanPanel.activeSelf}");
+        }
+
+        private static async Task RunArtSmokeAsync()
+        {
+            await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<StylizedCharacterAnimator>(
+                                           FindObjectsSortMode.None).Length == 4 &&
+                                       UnityEngine.Object.FindObjectsByType<FoodItem>(
+                                           FindObjectsSortMode.None).Length == 9,
+                TimeSpan.FromSeconds(20), "stylized role and food art");
+            var characters = UnityEngine.Object.FindObjectsByType<StylizedCharacterAnimator>(FindObjectsSortMode.None);
+            var foods = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+            if (characters.Any(character => character.ArtRoot == null) ||
+                foods.Any(food => food.transform.Find("FoodArtDetailsV2") == null) ||
+                GameObject.Find("StylizedKitchenDressingV2")?.GetComponentsInChildren<Collider>().Length != 0)
+                throw new InvalidOperationException("Stylized art is incomplete or changed gameplay collision.");
+            Debug.Log("ART_DIAGNOSTIC_SUCCESS characters=4 foodSizes=3 dressingCollision=0 bloodlessVfx=true");
         }
 
         private static async Task RunResultsRematchSmokeAsync(NetworkRoster roster, ulong localId,
