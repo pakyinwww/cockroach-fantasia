@@ -1,0 +1,12 @@
+{
+  "name": "CockroachFantasia.PlayModeTests",
+  "rootNamespace": "CockroachFantasia.Tests.PlayMode",
+  "references": [
+    "CockroachFantasia.Runtime",
+    "Unity.Netcode.Runtime"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false
+}

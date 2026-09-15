@@ -1,0 +1,808 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using CockroachFantasia.Characters;
+using CockroachFantasia.Food;
+using CockroachFantasia.Gameplay;
+using CockroachFantasia.Audio;
+using Unity.Netcode;
+using Unity.Profiling;
+using Unity.Multiplayer.Tools.NetworkSimulator.Runtime;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace CockroachFantasia.Networking
+{
+    public sealed class RosterDiagnosticCommandLineRunner : MonoBehaviour
+    {
+        private const string HostSwitch = "-rosterHostSmoke";
+        private const string JoinSwitch = "-rosterJoinSmoke";
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void CreateWhenRequested()
+        {
+            if (!Debug.isDebugBuild) return;
+            var arguments = Environment.GetCommandLineArgs();
+            if (!arguments.Contains(HostSwitch) && !arguments.Contains(JoinSwitch))
+            {
+                return;
+            }
+
+            DontDestroyOnLoad(new GameObject(nameof(RosterDiagnosticCommandLineRunner))
+                .AddComponent<RosterDiagnosticCommandLineRunner>());
+        }
+
+        private async void Start()
+        {
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = Environment.GetCommandLineArgs().Contains("-performanceSmoke") ? 60 : 30;
+
+            try
+            {
+                var arguments = Environment.GetCommandLineArgs();
+                var coordinator = SessionCoordinator.Instance ??
+                    throw new InvalidOperationException("Session coordinator is unavailable.");
+                var isHost = arguments.Contains(HostSwitch);
+                var codeFile = RequireArgument(arguments, "-roomCodeFile");
+
+                if (isHost)
+                {
+                    if (!await coordinator.HostPrivateSessionAsync())
+                    {
+                        throw new InvalidOperationException(coordinator.StatusMessage);
+                    }
+
+                    System.IO.File.WriteAllText(codeFile, coordinator.RoomCode);
+                }
+                else
+                {
+                    var roomCode = await WaitForTextFileAsync(codeFile, TimeSpan.FromSeconds(90));
+                    if (!await coordinator.JoinPrivateSessionAsync(roomCode))
+                    {
+                        throw new InvalidOperationException(coordinator.StatusMessage);
+                    }
+                }
+
+                await WaitUntilAsync(() => NetworkRoster.Instance != null, TimeSpan.FromSeconds(30), "NetworkRoster");
+                var roster = NetworkRoster.Instance;
+                var expectedPlayers = GetIntArgument(arguments, "-rosterExpectedPlayers", 4);
+                await WaitUntilAsync(() => roster.Entries.Count == expectedPlayers, TimeSpan.FromSeconds(60), "roster players");
+
+                var localId = NetworkManager.Singleton.LocalClientId;
+                var displayName = RequireArgument(arguments, "-rosterName");
+                roster.SetLocalDisplayName(displayName);
+                await WaitUntilAsync(
+                    () => roster.TryGetEntry(localId, out var entry) && entry.DisplayName.ToString() == displayName,
+                    TimeSpan.FromSeconds(15), "display-name replication");
+
+                var seatText = RequireArgument(arguments, "-rosterSeat");
+                if (!Enum.TryParse(seatText, true, out LobbySeat requestedSeat))
+                {
+                    throw new InvalidOperationException("Unknown roster seat: " + seatText);
+                }
+
+                bool? accepted = null;
+                string response = null;
+                void OnResolved(bool wasAccepted, string message)
+                {
+                    accepted = wasAccepted;
+                    response = message;
+                }
+
+                roster.LocalSeatRequestResolved += OnResolved;
+                roster.RequestSeat(requestedSeat);
+                await WaitUntilAsync(() => accepted.HasValue, TimeSpan.FromSeconds(15), "seat response");
+                roster.LocalSeatRequestResolved -= OnResolved;
+
+                var allowRace = arguments.Contains("-allowSeatRace");
+                if (!allowRace && accepted != true)
+                {
+                    throw new InvalidOperationException("Seat claim was rejected: " + response);
+                }
+
+                if (accepted == true)
+                {
+                    await WaitUntilAsync(
+                        () => roster.TryGetEntry(localId, out var entry) && entry.Seat == requestedSeat && !entry.Ready,
+                        TimeSpan.FromSeconds(15), "seat replication");
+                }
+
+                if (arguments.Contains("-requireValidDistribution"))
+                {
+                    await WaitUntilAsync(
+                        () => RosterRules.HasValidRoleDistribution(roster.Entries),
+                        TimeSpan.FromSeconds(30), "one Human and three Cockroaches");
+                }
+
+                var snapshot = string.Join("|", roster.Entries.OrderBy(entry => entry.ClientId)
+                    .Select(entry => $"{entry.ClientId}:{entry.DisplayName}:{entry.Seat}:{entry.Ready}:{entry.Connected}"));
+                Debug.Log($"ROSTER_DIAGNOSTIC_SNAPSHOT {snapshot}");
+
+                if (arguments.Contains("-rosterAttemptStartRejected"))
+                {
+                    var rejection = await RequestLobbyActionAsync(roster, roster.RequestStartMatch);
+                    if (rejection.Accepted)
+                        throw new InvalidOperationException("An unauthorized or invalid match start was accepted.");
+                    Debug.Log($"ROSTER_START_REJECTED {rejection.Message}");
+                }
+
+                if (arguments.Contains("-rosterReady"))
+                {
+                    var readyResult = await RequestLobbyActionAsync(roster, () => roster.SetLocalReady(true));
+                    if (!readyResult.Accepted)
+                        throw new InvalidOperationException("Ready request was rejected: " + readyResult.Message);
+                    await WaitUntilAsync(() => roster.TryGetEntry(localId, out var entry) && entry.Ready,
+                        TimeSpan.FromSeconds(15), "ready replication");
+                }
+
+                var expectKitchen = arguments.Contains("-rosterExpectKitchen");
+                if (arguments.Contains("-rosterStartMatch"))
+                {
+                    await WaitUntilAsync(() => roster.CanLocalHostStart, TimeSpan.FromSeconds(30), "start gate");
+                    roster.RequestStartMatch();
+                    expectKitchen = true;
+                }
+
+                if (arguments.Contains("-rosterDisconnectOnLoading"))
+                {
+                    await WaitUntilAsync(() => roster.IsLoading, TimeSpan.FromSeconds(30), "loading state");
+                    await coordinator.LeaveAsync();
+                    Debug.Log("ROSTER_LOADING_DISCONNECT_SUCCESS");
+                    Application.Quit(0);
+                    return;
+                }
+
+                if (arguments.Contains("-rosterExpectLoadingAbort"))
+                {
+                    await WaitUntilAsync(() => roster.IsLoading, TimeSpan.FromSeconds(30), "loading state");
+                    await WaitUntilAsync(() => !roster.IsLoading && roster.Entries.Count == expectedPlayers - 1,
+                        TimeSpan.FromSeconds(30), "loading abort and disconnect cleanup");
+                    if (SceneManager.GetActiveScene().name == "Kitchen")
+                        throw new InvalidOperationException("A partial match started after a loading disconnect.");
+                    Debug.Log("ROSTER_LOADING_ABORT_SUCCESS");
+                    expectKitchen = false;
+                }
+
+                if (expectKitchen)
+                {
+                    await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "Kitchen",
+                        TimeSpan.FromSeconds(60), "synchronized Kitchen load");
+                    if (!roster.TryGetEntry(localId, out var preserved) || preserved.Seat != requestedSeat)
+                        throw new InvalidOperationException("Assigned role was not preserved into Kitchen.");
+                    Debug.Log($"ROSTER_KITCHEN_SUCCESS client={localId} seat={preserved.Seat}");
+                }
+
+                if (arguments.Contains("-movementSmoke"))
+                {
+                    await RunMovementSmokeAsync(arguments, localId, requestedSeat, expectedPlayers);
+                }
+
+                if (arguments.Contains("-matchStateSmoke"))
+                {
+                    await WaitUntilAsync(() =>
+                    {
+                        var current = NetworkGameManager.Instance;
+                        return current != null && current.Phase == MatchPhase.Playing &&
+                               current.PlayingEndTimestamp > NetworkManager.Singleton.ServerTime.Time &&
+                               current.RemainingPlayingSeconds > 230d && current.RemainingPlayingSeconds <= 240d;
+                    }, TimeSpan.FromSeconds(15), "coherent authoritative Playing state");
+                    var game = NetworkGameManager.Instance;
+                    Debug.Log($"MATCH_STATE_DIAGNOSTIC phase={game.Phase} " +
+                              $"deadline={game.PlayingEndTimestamp:F3} remaining={game.RemainingPlayingSeconds:F3}");
+                }
+
+                if (arguments.Contains("-foodSpawnSmoke"))
+                {
+                    var authored = UnityEngine.Object.FindFirstObjectByType<KitchenFoodSpawner>()?.SpawnSet;
+                    if (!FoodConfigurationValidator.TryValidate(authored, out var authoredPoints, out var rejection))
+                        throw new InvalidOperationException("Invalid authored food: " + rejection);
+                    await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<FoodItem>(
+                            FindObjectsSortMode.None).Length == authored.Entries.Length,
+                        TimeSpan.FromSeconds(15), "authoritative food spawn set");
+                    var items = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+                    if (items.Any(item => item.Lifecycle != FoodLifecycleState.World ||
+                                          item.CarrierClientId != FoodItem.NoCarrier ||
+                                          item.Definition == null || item.Size != item.Definition.Size) ||
+                        items.Sum(item => item.Definition.Points) != authoredPoints)
+                        throw new InvalidOperationException("Replicated food state did not match the authored set.");
+                    var sizes = string.Join(",", items.GroupBy(item => item.Size).OrderBy(group => group.Key)
+                        .Select(group => $"{group.Key}:{group.Count()}"));
+                    Debug.Log($"FOOD_SPAWN_DIAGNOSTIC items={items.Length} points={authoredPoints} sizes={sizes}");
+                }
+
+                if (arguments.Contains("-foodCarrySmoke"))
+                {
+                    await RunFoodCarrySmokeAsync(requestedSeat, arguments.Contains("-foodDepositSmoke"));
+                }
+
+                if (arguments.Contains("-swatterSmoke"))
+                {
+                    await RunSwatterSmokeAsync(requestedSeat, arguments.Contains("-respawnSmoke"));
+                }
+
+                if (arguments.Contains("-hudSmoke"))
+                {
+                    await RunHudSmokeAsync(requestedSeat);
+                }
+
+                if (arguments.Contains("-artSmoke"))
+                {
+                    await RunArtSmokeAsync();
+                }
+
+                if (arguments.Contains("-audioSmoke"))
+                {
+                    await RunAudioSmokeAsync();
+                }
+
+                if (arguments.Contains("-interruptionSmoke"))
+                {
+                    await RunInterruptionSmokeAsync(arguments, roster, expectedPlayers);
+                }
+
+                if (arguments.Contains("-performanceSmoke"))
+                {
+                    await RunPerformanceSmokeAsync();
+                }
+
+                if (arguments.Contains("-resultsRematchSmoke"))
+                {
+                    await RunResultsRematchSmokeAsync(roster, localId, requestedSeat, expectedPlayers,
+                        arguments.Contains("-performanceSmoke"));
+                    Application.Quit(0);
+                    return;
+                }
+
+                var end = Time.realtimeSinceStartupAsDouble + GetIntArgument(arguments, "-rosterDurationSeconds", 8);
+                while (Time.realtimeSinceStartupAsDouble < end)
+                {
+                    ValidateRosterInvariant(roster);
+                    await Task.Delay(100);
+                }
+
+                Debug.Log($"ROSTER_DIAGNOSTIC_SUCCESS outcome={(accepted == true ? "won" : "rejected")}");
+                Application.Quit(0);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                Debug.LogError("ROSTER_DIAGNOSTIC_FAILED");
+                Application.Quit(5);
+            }
+        }
+
+        private static async Task RunHudSmokeAsync(LobbySeat requestedSeat)
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.AcceptsGameplayRequests &&
+                                       UnityEngine.Object.FindFirstObjectByType<CockroachFantasia.UI.MatchHudPresenter>() != null,
+                TimeSpan.FromSeconds(15), "role HUD");
+            await Task.Delay(100);
+            var hud = UnityEngine.Object.FindFirstObjectByType<CockroachFantasia.UI.MatchHudPresenter>();
+            var timer = hud.transform.Find("Timer").GetComponent<UnityEngine.UI.Text>().text;
+            var score = hud.transform.Find("Score").GetComponent<UnityEngine.UI.Text>().text;
+            var roachPanel = hud.transform.Find("CockroachHud").gameObject;
+            var humanPanel = hud.transform.Find("HumanHud").gameObject;
+            if (!timer.Contains(":") || !score.Contains("/ 12"))
+                throw new InvalidOperationException($"Shared HUD is incomplete: timer={timer}, score={score}.");
+            if (requestedSeat == LobbySeat.Human)
+            {
+                var reticle = humanPanel.transform.Find("Reticle").GetComponent<UnityEngine.UI.Text>().text;
+                var swatter = humanPanel.transform.Find("SwatterReadiness").GetComponent<UnityEngine.UI.Text>().text;
+                if (!humanPanel.activeSelf || roachPanel.activeSelf || reticle != "+" || !swatter.Contains("SWATTER"))
+                    throw new InvalidOperationException("Human HUD role state is incorrect.");
+            }
+            else
+            {
+                var carry = roachPanel.transform.Find("Carry").GetComponent<UnityEngine.UI.Text>().text;
+                var prompt = roachPanel.transform.Find("InteractPrompt").GetComponent<UnityEngine.UI.Text>().text;
+                if (!roachPanel.activeSelf || humanPanel.activeSelf || !carry.Contains("SPEED 100%") ||
+                    !prompt.Contains("E  PICK UP"))
+                    throw new InvalidOperationException("Cockroach HUD role state is incorrect.");
+            }
+            Debug.Log($"HUD_DIAGNOSTIC role={requestedSeat} timer={timer} score={score} " +
+                      $"roachPanel={roachPanel.activeSelf} humanPanel={humanPanel.activeSelf}");
+        }
+
+        private static async Task RunArtSmokeAsync()
+        {
+            await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<StylizedCharacterAnimator>(
+                                           FindObjectsSortMode.None).Length == 4 &&
+                                       UnityEngine.Object.FindObjectsByType<FoodItem>(
+                                           FindObjectsSortMode.None).Length == 9,
+                TimeSpan.FromSeconds(20), "stylized role and food art");
+            var characters = UnityEngine.Object.FindObjectsByType<StylizedCharacterAnimator>(FindObjectsSortMode.None);
+            var foods = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+            if (characters.Any(character => character.ArtRoot == null) ||
+                foods.Any(food => food.transform.Find("FoodArtDetailsV2") == null) ||
+                GameObject.Find("StylizedKitchenDressingV2")?.GetComponentsInChildren<Collider>().Length != 0)
+                throw new InvalidOperationException("Stylized art is incomplete or changed gameplay collision.");
+            Debug.Log("ART_DIAGNOSTIC_SUCCESS characters=4 foodSizes=3 dressingCollision=0 bloodlessVfx=true");
+        }
+
+        private static async Task RunAudioSmokeAsync()
+        {
+            await Task.Delay(100);
+            var audio = GameAudio.Instance;
+            var before = audio.PlayedCueCount;
+            foreach (GameAudioCue cue in Enum.GetValues(typeof(GameAudioCue)))
+            {
+                GameAudio.Play(cue);
+                await Task.Delay(60);
+            }
+            if (!audio.IsRoutedToMixer || audio.PlayedCueCount - before !=
+                Enum.GetValues(typeof(GameAudioCue)).Length)
+                throw new InvalidOperationException("Procedural audio cues are missing or bypassing the mixer.");
+            Debug.Log($"AUDIO_DIAGNOSTIC_SUCCESS cues={audio.PlayedCueCount - before} " +
+                      "mixerRouted=true playfulNonViolent=true");
+        }
+
+        private static async Task RunInterruptionSmokeAsync(string[] arguments, NetworkRoster roster,
+            int expectedPlayers)
+        {
+            var simulator = UnityEngine.Object.FindFirstObjectByType<NetworkSimulator>();
+            if (simulator == null)
+                throw new InvalidOperationException("Brief interruption diagnostic requires network simulation.");
+            // Queue traffic behind a short, severe lag spike instead of discarding
+            // reliable packets, matching a recoverable Wi-Fi interruption.
+            simulator.ConnectionPreset = NetworkSimulatorPreset.Create("Brief interruption",
+                packetDelayMs: 650, packetJitterMs: 80, packetLossPercent: 0);
+            await Task.Delay(450);
+            simulator.ConnectionPreset = NetworkSimulatorPreset.Create("Restored diagnostic network",
+                packetDelayMs: GetIntArgument(arguments, "-simulateDelayMs", 0), packetJitterMs: 0,
+                packetLossPercent: GetIntArgument(arguments, "-simulateLossPercent", 0));
+            // Peers enter this diagnostic independently. Leave a recovery window
+            // longer than their possible start skew before the host resolves a match.
+            await Task.Delay(5000);
+            if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsConnectedClient ||
+                roster.Entries.Count != expectedPlayers || !RosterRules.HasValidRoleDistribution(roster.Entries))
+                throw new InvalidOperationException("Roster diverged after the brief simulated interruption.");
+            Debug.Log($"INTERRUPTION_DIAGNOSTIC_SUCCESS players={roster.Entries.Count} staleEntries=0");
+        }
+
+        private static async Task RunPerformanceSmokeAsync()
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.AcceptsGameplayRequests,
+                TimeSpan.FromSeconds(15), "performance sample Playing state");
+            using var gcAlloc = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 256);
+            var frameSeconds = 0d;
+            var maxFrameSeconds = 0d;
+            var maxGcBytes = 0L;
+            var highAllocationFrames = 0;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var previous = stopwatch.Elapsed.TotalSeconds;
+            for (var frame = 0; frame < 240; frame++)
+            {
+                await Task.Yield();
+                var now = stopwatch.Elapsed.TotalSeconds;
+                var elapsed = now - previous;
+                previous = now;
+                if (frame < 10) continue;
+                frameSeconds += elapsed;
+                maxFrameSeconds = Math.Max(maxFrameSeconds, elapsed);
+                var allocatedBytes = gcAlloc.Valid ? gcAlloc.LastValue : 0L;
+                maxGcBytes = Math.Max(maxGcBytes, allocatedBytes);
+                if (allocatedBytes > 16 * 1024) highAllocationFrames++;
+            }
+            var averageMs = frameSeconds / 230d * 1000d;
+            var managedBytes = GC.GetTotalMemory(false);
+            var cameras = UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None).Count(camera =>
+                camera.enabled);
+            var renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None).Length;
+            var colliders = UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsSortMode.None).Length;
+            var voices = GameAudio.Instance.ActiveVoiceCount;
+            if (averageMs > 25d || highAllocationFrames > 3)
+                throw new InvalidOperationException($"Performance budget exceeded: avg={averageMs:F2}ms " +
+                                                    $"gcMax={maxGcBytes} bytes highGcFrames={highAllocationFrames}.");
+            Debug.Log($"PERFORMANCE_DIAGNOSTIC_SUCCESS avgFrameMs={averageMs:F2} maxFrameMs={maxFrameSeconds * 1000d:F2} " +
+                      $"maxGcAllocBytes={maxGcBytes} highGcFrames={highAllocationFrames} managedBytes={managedBytes} cameras={cameras} " +
+                      $"renderers={renderers} colliders={colliders} activeAudioVoices={voices}");
+        }
+
+        private static async Task RunResultsRematchSmokeAsync(NetworkRoster roster, ulong localId,
+            LobbySeat requestedSeat, int expectedPlayers, bool profileMemory)
+        {
+            var expectedListeners = -1;
+            var managedSamples = new long[3];
+            for (var cycle = 1; cycle <= 3; cycle++)
+            {
+                await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "Kitchen" &&
+                                           NetworkGameManager.Instance != null &&
+                                           NetworkGameManager.Instance.AcceptsGameplayRequests,
+                    TimeSpan.FromSeconds(30), $"playing cycle {cycle}");
+                await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<NetworkRoleAvatar>(
+                        FindObjectsSortMode.None).Length == expectedPlayers &&
+                                           UnityEngine.Object.FindObjectsByType<FoodItem>(
+                                               FindObjectsSortMode.None).Length == 9,
+                    TimeSpan.FromSeconds(20), $"fresh cycle {cycle} objects");
+
+                var listenerCount = UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None)
+                    .Count(listener => listener.enabled);
+                if (expectedListeners < 0) expectedListeners = listenerCount;
+                if (listenerCount != expectedListeners ||
+                    UnityEngine.Object.FindObjectsByType<NetworkGameManager>(FindObjectsSortMode.None).Length != 1)
+                    throw new InvalidOperationException("A rematch created duplicate managers or audio listeners.");
+                if (profileMemory)
+                {
+                    GC.Collect();
+                    managedSamples[cycle - 1] = GC.GetTotalMemory(true);
+                }
+
+                // Give every peer's runner time to observe Playing before the host
+                // intentionally resolves this otherwise four-minute match.
+                await Task.Delay(1000);
+
+                if (NetworkManager.Singleton.IsHost &&
+                    !NetworkGameManager.Instance.FinishForDiagnosticsByServer(MatchWinner.Cockroaches))
+                    throw new InvalidOperationException("Host could not finish the diagnostic match.");
+
+                await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                           NetworkGameManager.Instance.Phase == MatchPhase.Results,
+                    TimeSpan.FromSeconds(10), $"results cycle {cycle}");
+                await WaitUntilAsync(() =>
+                {
+                    var presenter = UnityEngine.Object.FindFirstObjectByType<CockroachFantasia.UI.MatchHudPresenter>();
+                    return presenter != null && presenter.ResultsPresentationCount == 1 &&
+                           presenter.transform.Find("ResultsPanel").gameObject.activeSelf;
+                }, TimeSpan.FromSeconds(5), $"results presentation cycle {cycle}");
+
+                var game = NetworkGameManager.Instance;
+                var hud = UnityEngine.Object.FindFirstObjectByType<CockroachFantasia.UI.MatchHudPresenter>();
+                var detail = hud.transform.Find("ResultsPanel/ResultsDetail").GetComponent<UnityEngine.UI.Text>().text;
+                if (game.Winner != MatchWinner.Cockroaches || game.DepositedPoints != 0 ||
+                    !detail.Contains("FINAL FOOD  0 / 12"))
+                    throw new InvalidOperationException("A peer displayed a different final result.");
+                Debug.Log($"RESULTS_DIAGNOSTIC cycle={cycle} winner={game.Winner} score=0/12 " +
+                          $"presentations={hud.ResultsPresentationCount} listeners={listenerCount}");
+
+                if (NetworkManager.Singleton.IsHost)
+                    await WaitUntilAsync(() => game.AllClientsAcknowledgedResults, TimeSpan.FromSeconds(20),
+                        $"results acknowledgements cycle {cycle}");
+
+                if (cycle == 3)
+                {
+                    // Keep the last results screen alive long enough for the
+                    // slowest Relay peer to assert it before FrontEnd loads.
+                    await Task.Delay(2000);
+                    break;
+                }
+                if (NetworkManager.Singleton.IsHost) roster.RequestRematch();
+                await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "Lobby" && !roster.IsLoading,
+                    TimeSpan.FromSeconds(30), $"rematch lobby cycle {cycle}");
+                await WaitUntilAsync(() => roster.Entries.Count == expectedPlayers &&
+                                           roster.TryGetEntry(localId, out var resetEntry) && !resetEntry.Ready &&
+                                           UnityEngine.Object.FindObjectsByType<FoodItem>(
+                                               FindObjectsSortMode.None).Length == 0,
+                    TimeSpan.FromSeconds(10), $"clean rematch state cycle {cycle}");
+
+                roster.SetLocalReady(true);
+                await WaitUntilAsync(() => roster.TryGetEntry(localId, out var entry) && entry.Ready,
+                    TimeSpan.FromSeconds(15), $"rematch ready cycle {cycle}");
+                if (NetworkManager.Singleton.IsHost)
+                {
+                    await WaitUntilAsync(() => roster.CanLocalHostStart, TimeSpan.FromSeconds(30),
+                        $"rematch start gate cycle {cycle}");
+                    roster.RequestStartMatch();
+                }
+            }
+
+            if (NetworkManager.Singleton.IsHost) roster.RequestReturnToMenu();
+            await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "FrontEnd",
+                TimeSpan.FromSeconds(30), "synchronized FrontEnd return");
+            await WaitUntilAsync(() => SessionCoordinator.Instance != null &&
+                                       SessionCoordinator.Instance.CurrentSession == null &&
+                                       (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening),
+                TimeSpan.FromSeconds(30), "clean Session leave");
+            // Let the Services scheduler finish its NetworkManagerSession stop callback
+            // before batch-mode teardown destroys the runtime bootstrap.
+            await Task.Delay(1000);
+            if (profileMemory)
+            {
+                var growth = managedSamples[2] - managedSamples[0];
+                if (growth > 8 * 1024 * 1024)
+                    throw new InvalidOperationException($"Managed memory grew by {growth} bytes over rematches.");
+                Debug.Log($"REMATCH_MEMORY_DIAGNOSTIC_SUCCESS samples={string.Join(",", managedSamples)} " +
+                          $"growthBytes={growth} persistentManagers=1 listeners={expectedListeners}");
+            }
+            Debug.Log($"RESULTS_REMATCH_DIAGNOSTIC_SUCCESS role={requestedSeat} cycles=3 sessionClean=true");
+        }
+
+        private static async Task RunSwatterSmokeAsync(LobbySeat requestedSeat, bool verifyRespawn)
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.AcceptsGameplayRequests &&
+                                       UnityEngine.Object.FindObjectsByType<CockroachMotor>(
+                                           FindObjectsSortMode.None).Length == 3,
+                TimeSpan.FromSeconds(20), "swatter prerequisites");
+            var attack = UnityEngine.Object.FindFirstObjectByType<SwatterAttack>();
+            if (attack == null) throw new InvalidOperationException("Human swatter component is missing.");
+            var startedAt = NetworkGameManager.Instance.PlayingEndTimestamp -
+                            NetworkGameManager.Instance.Rules.MatchDurationSeconds;
+            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >=
+                                       startedAt + (verifyRespawn ? 1.2d : 0.75d),
+                TimeSpan.FromSeconds(5), "swatter test time");
+            if (requestedSeat == LobbySeat.Human)
+                attack.RequestSwingForDiagnostics();
+            await WaitUntilAsync(() => attack.ConfirmedImpactSequence == 1,
+                TimeSpan.FromSeconds(5), "confirmed swatter impact");
+            if (attack.LastConfirmedHitCount != 3)
+                throw new InvalidOperationException($"Expected 3 host-computed hits, got {attack.LastConfirmedHitCount}.");
+            Debug.Log("SWATTER_DIAGNOSTIC sequence=1 hits=3 reach=1.8 windup=0.25 cooldown=1.1");
+
+            if (verifyRespawn)
+            {
+                await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<CockroachRespawn>(
+                        FindObjectsSortMode.None).Count(respawn => respawn.IsRespawning) == 3,
+                    TimeSpan.FromSeconds(3), "three replicated knockouts");
+                var knockedOut = UnityEngine.Object.FindObjectsByType<CockroachRespawn>(FindObjectsSortMode.None);
+                var earliest = knockedOut.Min(respawn => respawn.RespawnEndTimestamp);
+                var latest = knockedOut.Max(respawn => respawn.RespawnEndTimestamp);
+                var foods = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+                if (latest - earliest > 0.1d || foods.Length != 9 ||
+                    foods.Any(food => food.Lifecycle != FoodLifecycleState.World) ||
+                    foods.Sum(food => food.Definition.Points) != FoodConfigurationValidator.RequiredAvailablePoints ||
+                    knockedOut.Any(respawn => respawn.GetComponent<CharacterController>().enabled ||
+                                              respawn.GetComponent<CockroachMotor>().CanAcceptInput))
+                    throw new InvalidOperationException("Knockout state or cargo recovery disagreed.");
+                Debug.Log($"RESPAWN_DIAGNOSTIC phase=knockedOut players=3 cargoWorld=9 " +
+                          $"deadline={latest:F3} remaining={knockedOut[0].RemainingRespawnSeconds:F2}");
+
+                await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<CockroachRespawn>(
+                        FindObjectsSortMode.None).All(respawn => !respawn.IsRespawning),
+                    TimeSpan.FromSeconds(6), "safe nest respawn");
+                var restored = UnityEngine.Object.FindObjectsByType<CockroachRespawn>(FindObjectsSortMode.None);
+                if (restored.Any(respawn => !respawn.GetComponent<CharacterController>().enabled ||
+                                            !respawn.GetComponent<CockroachMotor>().CanAcceptInput) ||
+                    restored.Select(respawn => respawn.transform.position)
+                        .Any(position => position.x < -8f || position.x > -5.5f ||
+                                         position.z < 5.2f || position.z > 6.1f))
+                    throw new InvalidOperationException("A Cockroach was not restored at a safe nest spawn.");
+                Debug.Log("RESPAWN_DIAGNOSTIC phase=restored players=3 collision=true input=true");
+            }
+
+            if (!verifyRespawn)
+            {
+                if (requestedSeat == LobbySeat.Human)
+                    attack.RequestSwingForDiagnostics();
+                await Task.Delay(500);
+                if (attack.ConfirmedImpactSequence != 1)
+                    throw new InvalidOperationException("Server cooldown accepted a second immediate swat.");
+                Debug.Log("SWATTER_COOLDOWN_DIAGNOSTIC rejectedImmediateRepeat=true");
+            }
+        }
+
+        private static async Task RunFoodCarrySmokeAsync(LobbySeat requestedSeat, bool deposit)
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.AcceptsGameplayRequests &&
+                                       UnityEngine.Object.FindObjectsByType<FoodItem>(
+                                           FindObjectsSortMode.None).Length == 9,
+                TimeSpan.FromSeconds(20), "food carrying prerequisites");
+            var game = NetworkGameManager.Instance;
+            var playingStartedAt = game.PlayingEndTimestamp - game.Rules.MatchDurationSeconds;
+            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >= playingStartedAt + 0.75d,
+                TimeSpan.FromSeconds(5), "food pickup contest time");
+
+            var localCarrier = NetworkManager.Singleton.LocalClient.PlayerObject?
+                .GetComponent<CockroachFoodCarrier>();
+            var contested = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None)
+                // The first authored item touches the nest trigger. Use the next
+                // Small item so physics cannot auto-deposit before this test asks.
+                .OrderBy(food => food.NetworkObjectId).Skip(1).First();
+            if (requestedSeat != LobbySeat.Human)
+            {
+                if (localCarrier == null)
+                    throw new InvalidOperationException("Cockroach player has no food carrier component.");
+                localCarrier.RequestPickupForDiagnostics(contested);
+            }
+
+            if (!deposit)
+            {
+                await WaitUntilAsync(() =>
+                {
+                    if (NetworkManager.Singleton.ServerTime.Time < playingStartedAt + 1.75d) return false;
+                    var replicatedItems = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+                    var replicatedCarriers = UnityEngine.Object.FindObjectsByType<CockroachFoodCarrier>(
+                        FindObjectsSortMode.None);
+                    return replicatedItems.Count(food => food.Lifecycle == FoodLifecycleState.Carried) == 1 &&
+                           replicatedCarriers.Count(carrier => carrier.IsCarrying) == 1;
+                }, TimeSpan.FromSeconds(5), "food pickup replication");
+                var items = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None);
+                var carriers = UnityEngine.Object.FindObjectsByType<CockroachFoodCarrier>(FindObjectsSortMode.None);
+                var carriedItems = items.Where(food => food.Lifecycle == FoodLifecycleState.Carried).ToArray();
+                var winners = carriers.Where(carrier => carrier.IsCarrying).ToArray();
+                if (carriedItems.Length != 1 || winners.Length != 1 ||
+                    carriedItems[0].CarrierClientId != winners[0].OwnerClientId ||
+                    carriedItems[0].NetworkObjectId != winners[0].CarriedFoodNetworkId ||
+                    !winners[0].HasCarriedVisual || winners[0].CarriedVisualSize != carriedItems[0].Size ||
+                    Math.Abs(winners[0].GetComponent<CockroachMotor>().CurrentSpeedMultiplier -
+                             carriedItems[0].Definition.CarrySpeedMultiplier) > 0.001f)
+                    throw new InvalidOperationException("Atomic pickup state, visual, or speed penalty disagreed.");
+                Debug.Log($"FOOD_CARRY_DIAGNOSTIC phase=carried winner={winners[0].OwnerClientId} " +
+                          $"food={carriedItems[0].NetworkObjectId} size={carriedItems[0].Size} " +
+                          $"speed={carriedItems[0].Definition.CarrySpeedMultiplier:F2}");
+                if (localCarrier != null && localCarrier.IsCarrying)
+                    localCarrier.RequestDropForDiagnostics();
+            }
+            var expectedItems = deposit ? 8 : 9;
+            var expectedPoints = deposit ? 1 : 0;
+            await WaitUntilAsync(() => NetworkManager.Singleton.ServerTime.Time >= playingStartedAt + 2.75d &&
+                                       UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None)
+                                           .Count(food => food.Lifecycle == FoodLifecycleState.World) == expectedItems &&
+                                       UnityEngine.Object.FindObjectsByType<CockroachFoodCarrier>(
+                                           FindObjectsSortMode.None).All(carrier => !carrier.IsCarrying) &&
+                                       NetworkGameManager.Instance.DepositedPoints == expectedPoints,
+                TimeSpan.FromSeconds(5), deposit ? "food deposit replication" : "food drop replication");
+            var remainingPoints = UnityEngine.Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None)
+                .Sum(food => food.Definition.Points);
+            if (remainingPoints + expectedPoints != FoodConfigurationValidator.RequiredAvailablePoints)
+                throw new InvalidOperationException("Food was duplicated or lost after its transaction.");
+            Debug.Log(deposit
+                ? "FOOD_DEPOSIT_DIAGNOSTIC score=1/12 items=8 totalAccountedPoints=18"
+                : "FOOD_CARRY_DIAGNOSTIC phase=dropped items=9 points=18");
+        }
+
+        private static void ValidateRosterInvariant(NetworkRoster roster)
+        {
+            var connected = roster.Entries.Where(entry => entry.Connected).ToArray();
+            var occupied = connected.Where(entry => entry.Seat != LobbySeat.None).ToArray();
+            if (occupied.Select(entry => entry.Seat).Distinct().Count() != occupied.Length ||
+                occupied.Count(entry => entry.Role == PlayerRole.Human) > 1 ||
+                occupied.Count(entry => entry.Role == PlayerRole.Cockroach) > 3)
+            {
+                throw new InvalidOperationException("Authoritative roster invariant was violated.");
+            }
+        }
+
+        private static async Task RunMovementSmokeAsync(string[] arguments, ulong localId, LobbySeat expectedSeat,
+            int expectedPlayers)
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.Phase == MatchPhase.Playing,
+                TimeSpan.FromSeconds(15), "Playing phase before movement");
+            await WaitUntilAsync(() =>
+            {
+                var player = NetworkManager.Singleton?.LocalClient?.PlayerObject;
+                return player != null && player.GetComponent<NetworkRoleAvatar>() != null;
+            }, TimeSpan.FromSeconds(30), "local role avatar");
+            await WaitUntilAsync(() => UnityEngine.Object.FindObjectsByType<NetworkRoleAvatar>(
+                    FindObjectsSortMode.None).Length == expectedPlayers,
+                TimeSpan.FromSeconds(30), "remote role avatars");
+
+            var localObject = NetworkManager.Singleton.LocalClient.PlayerObject;
+            var identity = localObject.GetComponent<NetworkRoleAvatar>();
+            if (identity.Seat != expectedSeat)
+                throw new InvalidOperationException($"Spawned {identity.Seat} instead of {expectedSeat}.");
+
+            var before = UnityEngine.Object.FindObjectsByType<NetworkRoleAvatar>(FindObjectsSortMode.None)
+                .ToDictionary(avatar => avatar.OwnerClientId, avatar => avatar.transform.position);
+            var localStart = localObject.transform.position;
+            using var sentBytes = ProfilerRecorder.StartNew(ProfilerCategory.Network, "Total Bytes Sent", 128);
+            long sampledBytes = 0;
+            for (var frame = 0; frame < 90; frame++)
+            {
+                var move = GetDiagnosticMove(expectedSeat, frame);
+                if (localObject.TryGetComponent<CockroachMotor>(out var cockroach))
+                    cockroach.SimulateInput(move, new Vector2(0.25f, 0f), 1f / 30f);
+                else if (localObject.TryGetComponent<HumanMotor>(out var human))
+                    human.SimulateInput(move, new Vector2(0.25f, 0f), 1f / 30f);
+                else
+                    throw new InvalidOperationException("Role avatar has no movement controller.");
+
+                sampledBytes += Math.Max(0, sentBytes.LastValue);
+                await Task.Delay(33);
+            }
+
+            if (Vector3.Distance(localStart, localObject.transform.position) < 0.08f)
+                throw new InvalidOperationException("Owner movement waited or failed to move locally.");
+
+            if (arguments.Contains("-movementTeleportViolation"))
+            {
+                localObject.transform.position = new Vector3(50f, 5f, 50f);
+                var monitor = localObject.GetComponent<MovementSanityMonitor>();
+                await WaitUntilAsync(() => monitor.CorrectionCount > 0 &&
+                                           Mathf.Abs(localObject.transform.position.x) < 9f &&
+                                           Mathf.Abs(localObject.transform.position.z) < 7f,
+                    TimeSpan.FromSeconds(15), "host movement correction");
+                Debug.Log($"MOVEMENT_CORRECTION_SUCCESS corrections={monitor.CorrectionCount}");
+            }
+
+            await Task.Delay(2500);
+            var avatars = UnityEngine.Object.FindObjectsByType<NetworkRoleAvatar>(FindObjectsSortMode.None);
+            var bounds = new Bounds(new Vector3(0f, 1.05f, 0f), new Vector3(17.2f, 3f, 13.2f));
+            if (avatars.Length != expectedPlayers || avatars.Any(avatar => !bounds.Contains(avatar.transform.position)))
+                throw new InvalidOperationException("Remote player state was missing or outside playable bounds.");
+            var remoteMoved = avatars.Any(avatar => avatar.OwnerClientId != localId &&
+                                                    before.TryGetValue(avatar.OwnerClientId, out var start) &&
+                                                    Vector3.Distance(start, avatar.transform.position) > 0.05f);
+            if (expectedPlayers > 1 && !remoteMoved)
+                throw new InvalidOperationException("No interpolated remote movement was observed.");
+
+            Debug.Log($"MOVEMENT_DIAGNOSTIC_SUCCESS remoteCount={avatars.Length} sampledSentBytes={sampledBytes} " +
+                      $"sampleSeconds=3 unreliableDeltas=true");
+        }
+
+        private static Vector2 GetDiagnosticMove(LobbySeat seat, int frame)
+        {
+            if (frame >= 30) return Vector2.up;
+            return seat switch
+            {
+                LobbySeat.CockroachOne => Vector2.left,
+                LobbySeat.CockroachThree => Vector2.right,
+                _ => Vector2.up
+            };
+        }
+
+        private static async Task<string> WaitForTextFileAsync(string path, TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    var text = System.IO.File.ReadAllText(path).Trim();
+                    if (text.Length > 0) return text;
+                }
+
+                await Task.Delay(250);
+            }
+
+            throw new TimeoutException("Timed out waiting for the host room code.");
+        }
+
+        private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout, string operation)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (condition()) return;
+                await Task.Delay(100);
+            }
+
+            throw new TimeoutException("Timed out waiting for " + operation + ".");
+        }
+
+        private static async Task<(bool Accepted, string Message)> RequestLobbyActionAsync(
+            NetworkRoster roster, Action request)
+        {
+            bool? accepted = null;
+            var message = string.Empty;
+            void OnResolved(bool value, string response)
+            {
+                accepted = value;
+                message = response;
+            }
+
+            roster.LocalLobbyActionResolved += OnResolved;
+            request();
+            await WaitUntilAsync(() => accepted.HasValue, TimeSpan.FromSeconds(15), "lobby action response");
+            roster.LocalLobbyActionResolved -= OnResolved;
+            return (accepted == true, message);
+        }
+
+        private static string RequireArgument(string[] arguments, string key)
+        {
+            var value = GetArgument(arguments, key);
+            return string.IsNullOrWhiteSpace(value)
+                ? throw new InvalidOperationException(key + " requires a value.")
+                : value;
+        }
+
+        private static string GetArgument(string[] arguments, string key)
+        {
+            for (var index = 0; index < arguments.Length - 1; index++)
+            {
+                if (string.Equals(arguments[index], key, StringComparison.OrdinalIgnoreCase))
+                    return arguments[index + 1];
+            }
+
+            return string.Empty;
+        }
+
+        private static int GetIntArgument(string[] arguments, string key, int fallback)
+        {
+            return int.TryParse(GetArgument(arguments, key), out var value) && value > 0 ? value : fallback;
+        }
+    }
+}
