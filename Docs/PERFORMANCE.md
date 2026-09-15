@@ -15,6 +15,7 @@ and the single compact Kitchen. Low is the fallback for minimum hardware.
 
 ```powershell
 .\Tools\Run-MovementRelayDiagnostic.ps1 -OutputName performance -Performance -ResultsRematch
+.\Tools\Run-MovementRelayDiagnostic.ps1 -OutputName rendered-recommended -Performance -ResultsRematch -RenderedPrimary -RenderedWidth 1920 -RenderedHeight 1080
 ```
 
 This launches four standalone Windows players through real Sessions/Relay. Every peer samples 230
@@ -24,9 +25,10 @@ bytes, enabled cameras, renderers, colliders, and active pooled audio voices. Th
 maximum so one-time service warmup remains visible. Its movement phase also samples network bytes.
 Three rematch cycles verify stable counts for managers and enabled listeners.
 
-Batch `-nographics` results are CPU/memory/network regression evidence only. GPU frame time and target-
-hardware FPS must be captured with a rendered development build and Unity Profiler on both hardware
-tiers; this repository must not claim those physical measurements from a headless workstation run.
+The first command is CPU/memory/network regression evidence only. The second keeps the host rendered
+while its three Relay peers run headless, so its frame-time sample is valid physical-PC evidence at the
+requested resolution. Capture Unity Profiler GPU data alongside it for final sign-off. Both the minimum
+and recommended hardware tiers still require their own rendered capture.
 
 ## Optimizations and bounded systems
 
@@ -45,3 +47,17 @@ peer reported one enabled camera, 141 renderers, 36 colliders, and no idle audio
 rematches, managed-memory change ranged from -16,384 to +12,288 bytes; the host changed by +4,096
 bytes. Every peer retained one game manager and one enabled listener. Sampled movement traffic ranged
 from 632 to 9,296 sent bytes over the comparative three-second window.
+
+## 2026-09-15 rendered workstation capture
+
+One physical Windows PC (Ryzen 5 5600X, RTX 5060, 1920x1080, Direct3D 12) rendered the Human host
+while three headless peers shared the same live Relay match. The previously built player was still on
+the stricter Ultra default. It held 16.67 ms average and 17.19 ms maximum frame time (60 FPS target),
+completed three result/rematch cycles, retained one camera/listener, and showed 16 KiB managed-memory
+growth. One warmup frame allocated 113,449 bytes; steady frames stayed within the harness budget.
+
+That capture exposed repeated NGO warnings from constructing the avatar seat `NetworkVariable` in
+`Awake` and assigning it before spawn. The variable now initializes at field construction so NGO can
+discover it before the pre-spawn assignment. A clean rebuilt-player capture is still required after
+Unity licensing is available, along with representative minimum-tier hardware; the faster RTX 5060
+workstation does not by itself certify the documented GTX 1660/RX 590 tier.

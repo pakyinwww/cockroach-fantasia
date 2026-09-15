@@ -17,7 +17,10 @@ param(
     [switch]$Audio,
     [switch]$HostAsCockroach,
     [switch]$BriefInterruption,
-    [switch]$Performance
+    [switch]$Performance,
+    [switch]$RenderedPrimary,
+    [ValidateRange(640, 7680)][int]$RenderedWidth = 1920,
+    [ValidateRange(480, 4320)][int]$RenderedHeight = 1080
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,9 +30,10 @@ New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 $roomCodePath = Join-Path $outputDirectory 'room-code.txt'
 Remove-Item -LiteralPath $roomCodePath -Force -ErrorAction SilentlyContinue
 
-$common = "-batchmode -nographics -rosterExpectedPlayers 4 -requireValidDistribution " +
+$common = "-batchmode -rosterExpectedPlayers 4 -requireValidDistribution " +
           "-rosterReady -rosterExpectKitchen -simulateDelayMs $OneWayDelayMs " +
           "-simulateLossPercent $PacketLossPercent"
+if (-not $RenderedPrimary) { $common += ' -nographics' }
 if (-not $SkipMovement) { $common += ' -movementSmoke' }
 if ($MatchState) { $common += ' -matchStateSmoke' }
 if ($FoodSpawn) { $common += ' -foodSpawnSmoke' }
@@ -69,7 +73,13 @@ for ($index = 0; $index -lt $players.Count; $index++) {
     $profile = "$profilePrefix-$($player.Key)"
     $arguments = "$common $($player.Extra) -playerProfile $profile -roomCodeFile $roomCodePath " +
                  "-rosterName $($player.Name) -rosterSeat $($player.Seat) -logFile $logPath"
-    $processes += Start-Process -FilePath $resolvedPlayer -ArgumentList $arguments -WindowStyle Hidden -PassThru
+    if ($RenderedPrimary -and $index -eq 0) {
+        $arguments += " -screen-fullscreen 0 -screen-width $RenderedWidth -screen-height $RenderedHeight"
+        $processes += Start-Process -FilePath $resolvedPlayer -ArgumentList $arguments -PassThru
+    } else {
+        if ($RenderedPrimary) { $arguments += ' -nographics' }
+        $processes += Start-Process -FilePath $resolvedPlayer -ArgumentList $arguments -WindowStyle Hidden -PassThru
+    }
 
     if ($index -eq 0) {
         $roomDeadline = (Get-Date).AddSeconds(45)
