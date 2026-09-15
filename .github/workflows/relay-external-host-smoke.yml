@@ -1,6 +1,10 @@
 name: Relay external host smoke
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/relay-external-host-smoke.yml
   workflow_dispatch:
     inputs:
       issue_number:
@@ -15,6 +19,10 @@ on:
 permissions:
   contents: read
   issues: write
+
+concurrency:
+  group: relay-external-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   host:
@@ -33,13 +41,13 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          DURATION_SECONDS: ${{ inputs.duration_seconds }}
+          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || '3' }}
+          DURATION_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.duration_seconds || '600' }}
         run: |
           $exe = "$env:RUNNER_TEMP\CockroachFantasia\CockroachFantasia.exe"
           $codePath = "$env:RUNNER_TEMP\relay-room.txt"
           $logPath = "$env:RUNNER_TEMP\relay-external-host.log"
-          $arguments = "-batchmode -nographics -playerProfile relay-external-$env:GITHUB_RUN_ID -relayHostSmoke -roomCodeFile $codePath -relayDurationSeconds $env:DURATION_SECONDS -relayPostSuccessHoldSeconds 0 -logFile $logPath"
+          $arguments = "-batchmode -nographics -playerProfile relay-external-$env:GITHUB_RUN_ID -relayHostSmoke -roomCodeFile $codePath -relayDurationSeconds $env:DURATION_SECONDS -relayPostSuccessHoldSeconds 30 -logFile $logPath"
           $player = Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
 
           $deadline = (Get-Date).AddSeconds(90)
@@ -67,6 +75,7 @@ jobs:
           if (!(Select-String -LiteralPath $logPath -Pattern "RELAY_DIAGNOSTIC_SUCCESS role=host" -Quiet)) {
             throw "Relay host did not emit its success marker."
           }
+          gh issue comment $env:ISSUE_NUMBER --repo $env:GITHUB_REPOSITORY --body "RELAY_EXTERNAL_HOST_SUCCESS run=$env:GITHUB_RUN_ID runner=$env:RUNNER_NAME duration=$env:DURATION_SECONDS"
 
       - name: Upload host log
         if: always()
@@ -75,3 +84,72 @@ jobs:
           name: relay-external-host-log
           path: ${{ runner.temp }}\relay-external-host.log
           if-no-files-found: warn
+
+  clients:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        client: [1, 2, 3]
+    steps:
+      - name: Download temporary Windows diagnostic build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download relay-smoke-build --repo $env:GITHUB_REPOSITORY --pattern CockroachFantasia-Windows.zip --dir $env:RUNNER_TEMP
+          Expand-Archive -LiteralPath "$env:RUNNER_TEMP\CockroachFantasia-Windows.zip" -DestinationPath "$env:RUNNER_TEMP\CockroachFantasia"
+
+      - name: Join and soak through Relay
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || '3' }}
+          DURATION_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.duration_seconds || '600' }}
+          CLIENT_INDEX: ${{ matrix.client }}
+        run: |
+          $deadline = (Get-Date).AddSeconds(120)
+          $roomCode = $null
+          while (!$roomCode -and (Get-Date) -lt $deadline) {
+            $comments = gh api "repos/$env:GITHUB_REPOSITORY/issues/$env:ISSUE_NUMBER/comments" | ConvertFrom-Json
+            $prefix = "RELAY_EXTERNAL_HOST_READY run=$env:GITHUB_RUN_ID code="
+            $match = $comments | Where-Object { $_.body.StartsWith($prefix) } | Select-Object -Last 1
+            if ($match) { $roomCode = $match.body.Substring($prefix.Length).Trim() }
+            if (!$roomCode) { Start-Sleep -Seconds 2 }
+          }
+          if (!$roomCode) { throw "Timed out waiting for the external host room code." }
+
+          $exe = "$env:RUNNER_TEMP\CockroachFantasia\CockroachFantasia.exe"
+          $codePath = "$env:RUNNER_TEMP\relay-room.txt"
+          $logPath = "$env:RUNNER_TEMP\relay-external-client-$env:CLIENT_INDEX.log"
+          Set-Content -LiteralPath $codePath -Value $roomCode -NoNewline
+          $arguments = "-batchmode -nographics -playerProfile relay-external-$env:GITHUB_RUN_ID-c$env:CLIENT_INDEX -relayJoinSmoke -roomCodeFile $codePath -relayDurationSeconds $env:DURATION_SECONDS -relayPostSuccessHoldSeconds 0 -logFile $logPath"
+          $player = Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
+          Wait-Process -Id $player.Id -Timeout ([int]$env:DURATION_SECONDS + 180)
+          $player.Refresh()
+          Get-Content -LiteralPath $logPath
+          if ($player.ExitCode -ne 0) { throw "Relay client $env:CLIENT_INDEX exited with code $($player.ExitCode)." }
+          if (!(Select-String -LiteralPath $logPath -Pattern "RELAY_DIAGNOSTIC_SUCCESS role=client" -Quiet)) {
+            throw "Relay client $env:CLIENT_INDEX did not emit its success marker."
+          }
+          gh issue comment $env:ISSUE_NUMBER --repo $env:GITHUB_REPOSITORY --body "RELAY_EXTERNAL_CLIENT_SUCCESS run=$env:GITHUB_RUN_ID client=$env:CLIENT_INDEX runner=$env:RUNNER_NAME duration=$env:DURATION_SECONDS"
+
+      - name: Upload client log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-external-client-${{ matrix.client }}-log
+          path: ${{ runner.temp }}\relay-external-client-${{ matrix.client }}.log
+          if-no-files-found: warn
+
+  complete:
+    needs: [host, clients]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record four-runner success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || '3' }}
+          DURATION_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.duration_seconds || '600' }}
+        run: gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "RELAY_EXTERNAL_FOUR_RUNNER_SUCCESS run=$GITHUB_RUN_ID windowsRunners=4 duration=$DURATION_SECONDS"

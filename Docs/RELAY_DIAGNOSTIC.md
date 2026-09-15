@@ -37,7 +37,14 @@ uniquely owned player objects for 600 seconds, emitted no NGO warnings or
 diagnostic failures, and exited with code 0. Logs remain local build artifacts
 and are intentionally excluded from source control.
 
-The `Relay external host smoke` workflow can host the same diagnostic on a
-separate GitHub-hosted Windows machine. It downloads the temporary
-`relay-smoke-build` draft-release asset, publishes its ephemeral room code on the
-issue selected at dispatch time, and retains the host log as a workflow artifact.
+The `Relay external host smoke` workflow runs the complete diagnostic on four
+independent GitHub-hosted Windows runners: one host and three clients. It
+downloads the temporary `relay-smoke-build` prerelease asset, publishes the
+ephemeral room code on the selected issue, soaks all four peers for ten minutes,
+and retains one log artifact per runner. The host remains online for a short
+grace period after its assertion so every client can complete cleanly.
+
+A successful run comments `RELAY_EXTERNAL_FOUR_RUNNER_SUCCESS` on the selected
+issue. This is external-machine Relay evidence, but it is not a substitute for
+the issue's final hands-on test across two physical Windows PCs or its manual
+playability observations.
