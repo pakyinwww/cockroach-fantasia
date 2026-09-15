@@ -241,6 +241,13 @@ namespace CockroachFantasia.Networking
                 return;
             }
 
+            if (!NetworkGameManager.Instance.AllClientsAcknowledgedResults)
+            {
+                ResolveLobbyActionRpc(false, new FixedString64Bytes("Waiting for every player to see the results."),
+                    RpcTarget.Single(clientId, RpcTargetUse.Temp));
+                return;
+            }
+
             BeginResultsTransition(returnToMenu, clientId);
         }
 

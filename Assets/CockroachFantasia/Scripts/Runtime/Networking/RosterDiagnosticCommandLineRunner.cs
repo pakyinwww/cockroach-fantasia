@@ -7,6 +7,7 @@ using CockroachFantasia.Gameplay;
 using CockroachFantasia.Audio;
 using Unity.Netcode;
 using Unity.Profiling;
+using Unity.Multiplayer.Tools.NetworkSimulator.Runtime;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -233,6 +234,11 @@ namespace CockroachFantasia.Networking
                     await RunAudioSmokeAsync();
                 }
 
+                if (arguments.Contains("-interruptionSmoke"))
+                {
+                    await RunInterruptionSmokeAsync(arguments, roster, expectedPlayers);
+                }
+
                 if (arguments.Contains("-resultsRematchSmoke"))
                 {
                     await RunResultsRematchSmokeAsync(roster, localId, requestedSeat, expectedPlayers);
@@ -324,6 +330,29 @@ namespace CockroachFantasia.Networking
                       "mixerRouted=true playfulNonViolent=true");
         }
 
+        private static async Task RunInterruptionSmokeAsync(string[] arguments, NetworkRoster roster,
+            int expectedPlayers)
+        {
+            var simulator = UnityEngine.Object.FindFirstObjectByType<NetworkSimulator>();
+            if (simulator == null)
+                throw new InvalidOperationException("Brief interruption diagnostic requires network simulation.");
+            // Queue traffic behind a short, severe lag spike instead of discarding
+            // reliable packets, matching a recoverable Wi-Fi interruption.
+            simulator.ConnectionPreset = NetworkSimulatorPreset.Create("Brief interruption",
+                packetDelayMs: 650, packetJitterMs: 80, packetLossPercent: 0);
+            await Task.Delay(450);
+            simulator.ConnectionPreset = NetworkSimulatorPreset.Create("Restored diagnostic network",
+                packetDelayMs: GetIntArgument(arguments, "-simulateDelayMs", 0), packetJitterMs: 0,
+                packetLossPercent: GetIntArgument(arguments, "-simulateLossPercent", 0));
+            // Peers enter this diagnostic independently. Leave a recovery window
+            // longer than their possible start skew before the host resolves a match.
+            await Task.Delay(5000);
+            if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsConnectedClient ||
+                roster.Entries.Count != expectedPlayers || !RosterRules.HasValidRoleDistribution(roster.Entries))
+                throw new InvalidOperationException("Roster diverged after the brief simulated interruption.");
+            Debug.Log($"INTERRUPTION_DIAGNOSTIC_SUCCESS players={roster.Entries.Count} staleEntries=0");
+        }
+
         private static async Task RunResultsRematchSmokeAsync(NetworkRoster roster, ulong localId,
             LobbySeat requestedSeat, int expectedPlayers)
         {
@@ -374,6 +403,10 @@ namespace CockroachFantasia.Networking
                 Debug.Log($"RESULTS_DIAGNOSTIC cycle={cycle} winner={game.Winner} score=0/12 " +
                           $"presentations={hud.ResultsPresentationCount} listeners={listenerCount}");
 
+                if (NetworkManager.Singleton.IsHost)
+                    await WaitUntilAsync(() => game.AllClientsAcknowledgedResults, TimeSpan.FromSeconds(20),
+                        $"results acknowledgements cycle {cycle}");
+
                 if (cycle == 3)
                 {
                     // Keep the last results screen alive long enough for the
@@ -408,6 +441,9 @@ namespace CockroachFantasia.Networking
                                        SessionCoordinator.Instance.CurrentSession == null &&
                                        (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening),
                 TimeSpan.FromSeconds(30), "clean Session leave");
+            // Let the Services scheduler finish its NetworkManagerSession stop callback
+            // before batch-mode teardown destroys the runtime bootstrap.
+            await Task.Delay(1000);
             Debug.Log($"RESULTS_REMATCH_DIAGNOSTIC_SUCCESS role={requestedSeat} cycles=3 sessionClean=true");
         }
 

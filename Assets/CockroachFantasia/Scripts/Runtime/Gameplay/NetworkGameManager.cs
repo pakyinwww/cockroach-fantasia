@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CockroachFantasia.Characters;
 using Unity.Netcode;
 using UnityEngine;
@@ -19,6 +20,7 @@ namespace CockroachFantasia.Gameplay
         private NetworkVariable<MatchWinner> winner;
         private NetworkVariable<int> depositedPoints;
         private NetworkVariable<double> playingEndTimestamp;
+        private NetworkList<ulong> resultAcknowledgements;
         private MatchStateMachine stateMachine;
 
         public static NetworkGameManager Instance => instance;
@@ -28,6 +30,9 @@ namespace CockroachFantasia.Gameplay
         public double PlayingEndTimestamp => playingEndTimestamp.Value;
         public MatchRules Rules => rules;
         public bool AcceptsGameplayRequests => phase.Value == MatchPhase.Playing;
+        public bool AllClientsAcknowledgedResults => IsServer && NetworkManager != null &&
+            NetworkManager.ConnectedClientsIds.Count > 0 &&
+            NetworkManager.ConnectedClientsIds.All(clientId => resultAcknowledgements.Contains(clientId));
         public double RemainingPlayingSeconds => phase.Value == MatchPhase.Playing && NetworkManager != null
             ? MatchClock.RemainingSeconds(playingEndTimestamp.Value, NetworkManager.ServerTime.Time)
             : 0d;
@@ -45,6 +50,7 @@ namespace CockroachFantasia.Gameplay
             winner ??= new NetworkVariable<MatchWinner>();
             depositedPoints ??= new NetworkVariable<int>();
             playingEndTimestamp ??= new NetworkVariable<double>();
+            resultAcknowledgements ??= new NetworkList<ulong>();
         }
 
         public override void OnNetworkSpawn()
@@ -54,7 +60,9 @@ namespace CockroachFantasia.Gameplay
             winner.OnValueChanged += OnWinnerChanged;
             depositedPoints.OnValueChanged += OnScoreChanged;
             playingEndTimestamp.OnValueChanged += OnDeadlineChanged;
+            resultAcknowledgements.OnListChanged += OnResultAcknowledgementChanged;
             ApplyPlayerControl();
+            if (phase.Value == MatchPhase.Results) AcknowledgeResultsRpc();
             if (!IsServer) return;
             if (rules == null)
             {
@@ -74,6 +82,7 @@ namespace CockroachFantasia.Gameplay
             winner.OnValueChanged -= OnWinnerChanged;
             depositedPoints.OnValueChanged -= OnScoreChanged;
             playingEndTimestamp.OnValueChanged -= OnDeadlineChanged;
+            resultAcknowledgements.OnListChanged -= OnResultAcknowledgementChanged;
             if (IsServer && NetworkManager != null && NetworkManager.SceneManager != null)
                 NetworkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
             if (instance == this) instance = null;
@@ -123,6 +132,8 @@ namespace CockroachFantasia.Gameplay
 
         private void PublishState()
         {
+            if (IsServer && stateMachine.Phase != MatchPhase.Results && resultAcknowledgements.Count > 0)
+                resultAcknowledgements.Clear();
             phase.Value = stateMachine.Phase;
             winner.Value = stateMachine.Winner;
             depositedPoints.Value = stateMachine.DepositedPoints;
@@ -132,11 +143,21 @@ namespace CockroachFantasia.Gameplay
         private void OnPhaseChanged(MatchPhase previous, MatchPhase current)
         {
             ApplyPlayerControl();
+            if (current == MatchPhase.Results) AcknowledgeResultsRpc();
             StateChanged?.Invoke();
         }
         private void OnWinnerChanged(MatchWinner previous, MatchWinner current) => StateChanged?.Invoke();
         private void OnScoreChanged(int previous, int current) => StateChanged?.Invoke();
         private void OnDeadlineChanged(double previous, double current) => StateChanged?.Invoke();
+        private void OnResultAcknowledgementChanged(NetworkListEvent<ulong> change) => StateChanged?.Invoke();
+
+        [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+        private void AcknowledgeResultsRpc(RpcParams rpcParams = default)
+        {
+            if (!IsServer || phase.Value != MatchPhase.Results) return;
+            var clientId = rpcParams.Receive.SenderClientId;
+            if (!resultAcknowledgements.Contains(clientId)) resultAcknowledgements.Add(clientId);
+        }
 
         private void OnLoadEventCompleted(string sceneName, LoadSceneMode mode, List<ulong> clientsCompleted,
             List<ulong> clientsTimedOut)

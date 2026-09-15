@@ -14,7 +14,9 @@ param(
     [switch]$Hud,
     [switch]$ResultsRematch,
     [switch]$Art,
-    [switch]$Audio
+    [switch]$Audio,
+    [switch]$HostAsCockroach,
+    [switch]$BriefInterruption
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,12 +40,18 @@ if ($Hud) { $common += ' -hudSmoke' }
 if ($ResultsRematch) { $common += ' -resultsRematchSmoke' }
 if ($Art) { $common += ' -artSmoke' }
 if ($Audio) { $common += ' -audioSmoke' }
+if ($BriefInterruption) { $common += ' -interruptionSmoke' }
 $players = @(
     @{ Key = 'host'; Name = 'Human'; Seat = 'Human'; Extra = '-rosterHostSmoke -rosterStartMatch -rosterDurationSeconds 8' },
     @{ Key = 'c1'; Name = 'RoachA'; Seat = 'CockroachOne'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
     @{ Key = 'c2'; Name = 'RoachB'; Seat = 'CockroachTwo'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
     @{ Key = 'c3'; Name = 'RoachC'; Seat = 'CockroachThree'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' }
 )
+
+if ($HostAsCockroach) {
+    $players[0].Seat = 'CockroachOne'
+    $players[1].Seat = 'Human'
+}
 
 if ($TeleportViolation) {
     $players[1].Extra += ' -movementTeleportViolation'
@@ -98,6 +106,7 @@ $results = for ($index = 0; $index -lt $players.Count; $index++) {
         ResultsRematch = (Select-String -Path $logPath -Pattern 'RESULTS_REMATCH_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
         Art = (Select-String -Path $logPath -Pattern 'ART_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
         Audio = (Select-String -Path $logPath -Pattern 'AUDIO_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
+        Interruption = (Select-String -Path $logPath -Pattern 'INTERRUPTION_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
     }
 }
 
@@ -115,6 +124,10 @@ if ($processes.Where({ $_.ExitCode -ne 0 }).Count -gt 0 -or
     ($ResultsRematch -and $results.Where({ [string]::IsNullOrWhiteSpace($_.ResultsRematch) }).Count -gt 0) -or
     ($Art -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Art) }).Count -gt 0) -or
     ($Audio -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Audio) }).Count -gt 0)) {
+    throw "Movement diagnostic failed. Inspect $outputDirectory."
+}
+
+if ($BriefInterruption -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Interruption) }).Count -gt 0) {
     throw "Movement diagnostic failed. Inspect $outputDirectory."
 }
 

@@ -236,9 +236,22 @@ namespace CockroachFantasia.UI
                                           $"FINAL FOOD  {game.DepositedPoints} / {game.Rules.FoodQuotaPoints}";
 
             var isHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
-            if (rematchButton != null) rematchButton.gameObject.SetActive(isHost);
-            if (returnButton != null) returnButton.gameObject.SetActive(isHost);
-            if (waitingForHostLabel != null) waitingForHostLabel.gameObject.SetActive(!isHost);
+            var canTransition = isHost && game.AllClientsAcknowledgedResults;
+            if (rematchButton != null)
+            {
+                rematchButton.gameObject.SetActive(isHost);
+                rematchButton.interactable = canTransition;
+            }
+            if (returnButton != null)
+            {
+                returnButton.gameObject.SetActive(isHost);
+                returnButton.interactable = canTransition;
+            }
+            if (waitingForHostLabel != null)
+            {
+                waitingForHostLabel.gameObject.SetActive(!canTransition);
+                waitingForHostLabel.text = isHost ? "WAITING FOR EVERY PLAYER…" : "WAITING FOR HOST…";
+            }
         }
 
         private static void RequestRematch()
