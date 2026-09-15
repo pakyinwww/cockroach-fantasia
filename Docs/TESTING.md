@@ -35,6 +35,27 @@ external services and require a linked Unity Cloud project. Run them manually in
 the `production` environment before a release candidate. Never place access
 tokens or service-account credentials in the repository.
 
+Build the Windows development player, then run the four-peer Session/Relay checks
+with `Tools/Run-MovementRelayDiagnostic.ps1`. Useful focused switches include
+`-FoodCarry`, `-FoodDeposit`, `-Swatter`, `-Respawn`, `-ResultsRematch`, and `-Audio`.
+These launch one host and three clients with isolated player profiles; they are
+intentionally excluded from ordinary CI because they sign in anonymously and
+create production service resources.
+
+## Regression coverage
+
+The local Edit Mode suite explicitly covers roster distribution, movement/carry
+modifiers, match timing and single-winner resolution, swat cooldown and target
+deduplication, respawn timing, disconnect cargo cleanup, authorization boundaries,
+join-code handling, and error mapping. Deposit-versus-hit is tested in both server
+processing orders, including the timeout boundary.
+
+The Play Mode suite verifies role prefab ownership contracts, owner-only cameras
+and listeners, one lifecycle per networked food prefab, deterministic scene setup,
+HUD/results/rematch presentation, and loopback NGO connectivity. Four-player scene
+changes, claims, interaction races, results, and rematches are additionally covered
+by the opt-in built-player diagnostic above.
+
 ## Determinism
 
 Gameplay systems that depend on time or random selection receive `IGameClock`

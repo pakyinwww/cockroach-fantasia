@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CockroachFantasia.Networking;
 
 namespace CockroachFantasia.Gameplay
@@ -11,6 +12,11 @@ namespace CockroachFantasia.Gameplay
         {
             return seat == LobbySeat.Human && phase == MatchPhase.Playing &&
                    serverTime - lastAcceptedServerTime >= CooldownSeconds;
+        }
+
+        public static bool TrySelectUniqueTarget(ulong networkObjectId, ISet<ulong> selectedTargets)
+        {
+            return selectedTargets != null && selectedTargets.Add(networkObjectId);
         }
     }
 }

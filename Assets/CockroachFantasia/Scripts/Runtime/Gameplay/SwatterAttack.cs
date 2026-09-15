@@ -115,12 +115,13 @@ namespace CockroachFantasia.Gameplay
             }
 
             var end = origin + direction * ReachMetres;
+            var selectedTargetIds = new HashSet<ulong>();
             var targets = Physics.OverlapCapsule(origin, end, SweepRadiusMetres, ~0,
                     QueryTriggerInteraction.Ignore)
                 .Select(hit => hit.GetComponentInParent<CockroachMotor>())
-                .Where(target => target != null && target.IsSpawned)
-                .GroupBy(target => target.NetworkObjectId)
-                .Select(group => group.First())
+                .Where(target => target != null && target.IsSpawned &&
+                                 SwatterAttackRules.TrySelectUniqueTarget(target.NetworkObjectId,
+                                     selectedTargetIds))
                 .ToArray();
             if (targets.Length == 0) yield break;
 
