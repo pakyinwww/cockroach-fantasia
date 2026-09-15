@@ -34,7 +34,7 @@ namespace CockroachFantasia.Networking
         private async void Start()
         {
             QualitySettings.vSyncCount = 0;
-            Application.targetFrameRate = 30;
+            Application.targetFrameRate = Environment.GetCommandLineArgs().Contains("-performanceSmoke") ? 60 : 30;
 
             try
             {
@@ -239,9 +239,15 @@ namespace CockroachFantasia.Networking
                     await RunInterruptionSmokeAsync(arguments, roster, expectedPlayers);
                 }
 
+                if (arguments.Contains("-performanceSmoke"))
+                {
+                    await RunPerformanceSmokeAsync();
+                }
+
                 if (arguments.Contains("-resultsRematchSmoke"))
                 {
-                    await RunResultsRematchSmokeAsync(roster, localId, requestedSeat, expectedPlayers);
+                    await RunResultsRematchSmokeAsync(roster, localId, requestedSeat, expectedPlayers,
+                        arguments.Contains("-performanceSmoke"));
                     Application.Quit(0);
                     return;
                 }
@@ -353,10 +359,51 @@ namespace CockroachFantasia.Networking
             Debug.Log($"INTERRUPTION_DIAGNOSTIC_SUCCESS players={roster.Entries.Count} staleEntries=0");
         }
 
+        private static async Task RunPerformanceSmokeAsync()
+        {
+            await WaitUntilAsync(() => NetworkGameManager.Instance != null &&
+                                       NetworkGameManager.Instance.AcceptsGameplayRequests,
+                TimeSpan.FromSeconds(15), "performance sample Playing state");
+            using var gcAlloc = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame", 256);
+            var frameSeconds = 0d;
+            var maxFrameSeconds = 0d;
+            var maxGcBytes = 0L;
+            var highAllocationFrames = 0;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var previous = stopwatch.Elapsed.TotalSeconds;
+            for (var frame = 0; frame < 240; frame++)
+            {
+                await Task.Yield();
+                var now = stopwatch.Elapsed.TotalSeconds;
+                var elapsed = now - previous;
+                previous = now;
+                if (frame < 10) continue;
+                frameSeconds += elapsed;
+                maxFrameSeconds = Math.Max(maxFrameSeconds, elapsed);
+                var allocatedBytes = gcAlloc.Valid ? gcAlloc.LastValue : 0L;
+                maxGcBytes = Math.Max(maxGcBytes, allocatedBytes);
+                if (allocatedBytes > 16 * 1024) highAllocationFrames++;
+            }
+            var averageMs = frameSeconds / 230d * 1000d;
+            var managedBytes = GC.GetTotalMemory(false);
+            var cameras = UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None).Count(camera =>
+                camera.enabled);
+            var renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None).Length;
+            var colliders = UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsSortMode.None).Length;
+            var voices = GameAudio.Instance.ActiveVoiceCount;
+            if (averageMs > 25d || highAllocationFrames > 3)
+                throw new InvalidOperationException($"Performance budget exceeded: avg={averageMs:F2}ms " +
+                                                    $"gcMax={maxGcBytes} bytes highGcFrames={highAllocationFrames}.");
+            Debug.Log($"PERFORMANCE_DIAGNOSTIC_SUCCESS avgFrameMs={averageMs:F2} maxFrameMs={maxFrameSeconds * 1000d:F2} " +
+                      $"maxGcAllocBytes={maxGcBytes} highGcFrames={highAllocationFrames} managedBytes={managedBytes} cameras={cameras} " +
+                      $"renderers={renderers} colliders={colliders} activeAudioVoices={voices}");
+        }
+
         private static async Task RunResultsRematchSmokeAsync(NetworkRoster roster, ulong localId,
-            LobbySeat requestedSeat, int expectedPlayers)
+            LobbySeat requestedSeat, int expectedPlayers, bool profileMemory)
         {
             var expectedListeners = -1;
+            var managedSamples = new long[3];
             for (var cycle = 1; cycle <= 3; cycle++)
             {
                 await WaitUntilAsync(() => SceneManager.GetActiveScene().name == "Kitchen" &&
@@ -375,6 +422,11 @@ namespace CockroachFantasia.Networking
                 if (listenerCount != expectedListeners ||
                     UnityEngine.Object.FindObjectsByType<NetworkGameManager>(FindObjectsSortMode.None).Length != 1)
                     throw new InvalidOperationException("A rematch created duplicate managers or audio listeners.");
+                if (profileMemory)
+                {
+                    GC.Collect();
+                    managedSamples[cycle - 1] = GC.GetTotalMemory(true);
+                }
 
                 // Give every peer's runner time to observe Playing before the host
                 // intentionally resolves this otherwise four-minute match.
@@ -444,6 +496,14 @@ namespace CockroachFantasia.Networking
             // Let the Services scheduler finish its NetworkManagerSession stop callback
             // before batch-mode teardown destroys the runtime bootstrap.
             await Task.Delay(1000);
+            if (profileMemory)
+            {
+                var growth = managedSamples[2] - managedSamples[0];
+                if (growth > 8 * 1024 * 1024)
+                    throw new InvalidOperationException($"Managed memory grew by {growth} bytes over rematches.");
+                Debug.Log($"REMATCH_MEMORY_DIAGNOSTIC_SUCCESS samples={string.Join(",", managedSamples)} " +
+                          $"growthBytes={growth} persistentManagers=1 listeners={expectedListeners}");
+            }
             Debug.Log($"RESULTS_REMATCH_DIAGNOSTIC_SUCCESS role={requestedSeat} cycles=3 sessionClean=true");
         }
 

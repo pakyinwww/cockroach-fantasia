@@ -72,6 +72,7 @@ namespace CockroachFantasia.Characters
             cameraYaw = transform.eulerAngles.y;
             if (IsOwner)
             {
+                DisableFallbackPresentation();
                 SetLookSettings(PlayerPreferences.MouseSensitivity, PlayerPreferences.InvertY);
                 Cursor.lockState = CursorLockMode.Locked;
             }
@@ -190,6 +191,14 @@ namespace CockroachFantasia.Characters
         {
             if (ownerCamera != null) ownerCamera.enabled = enabled;
             if (ownerListener != null) ownerListener.enabled = enabled;
+        }
+
+        private void DisableFallbackPresentation()
+        {
+            var fallback = GameObject.Find("Main Camera");
+            if (fallback == null || fallback.transform.IsChildOf(transform)) return;
+            if (fallback.TryGetComponent<Camera>(out var camera)) camera.enabled = false;
+            if (fallback.TryGetComponent<AudioListener>(out var listener)) listener.enabled = false;
         }
 
         private static Vector2 ReadMoveInput()

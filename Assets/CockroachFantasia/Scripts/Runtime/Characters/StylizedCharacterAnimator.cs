@@ -17,6 +17,7 @@ namespace CockroachFantasia.Characters
         private Vector3 previousPosition;
         private bool isCockroach;
         private float stepDistance;
+        private CockroachFoodCarrier carrier;
 
         public Transform ArtRoot => artRoot;
 
@@ -30,6 +31,7 @@ namespace CockroachFantasia.Characters
         private void Awake()
         {
             isCockroach = GetComponent<CockroachMotor>() != null;
+            carrier = GetComponent<CockroachFoodCarrier>();
             if (artRoot == null) return;
             restPosition = artRoot.localPosition;
             restScale = artRoot.localScale;
@@ -56,14 +58,14 @@ namespace CockroachFantasia.Characters
                 stepDistance = 0f;
                 GameAudio.Play(isCockroach ? GameAudioCue.CockroachStep : GameAudioCue.HumanStep,
                     transform.position);
-                if (isCockroach && GetComponent<CockroachFoodCarrier>()?.IsCarrying == true)
+                if (isCockroach && carrier?.IsCarrying == true)
                     GameAudio.Play(GameAudioCue.FoodRustle, transform.position, 0.035f);
             }
             var moving = Mathf.Clamp01(speed / (isCockroach ? 3.2f : 4.5f));
             var phase = Time.time * (isCockroach ? 15f : 9f);
             artRoot.localPosition = restPosition + Vector3.up * (Mathf.Abs(Mathf.Sin(phase)) * 0.025f * moving);
             artRoot.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(phase) * (isCockroach ? 5f : 2f) * moving);
-            var carrying = GetComponent<CockroachFoodCarrier>()?.IsCarrying == true;
+            var carrying = carrier?.IsCarrying == true;
             var targetScale = carrying
                 ? Vector3.Scale(restScale, new Vector3(1.08f, 0.9f, 1.12f))
                 : restScale;

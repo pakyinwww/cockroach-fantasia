@@ -21,6 +21,16 @@ namespace CockroachFantasia.Audio
         public GameAudioCue LastCue { get; private set; }
         public bool IsRoutedToMixer => outputGroup != null && voices.TrueForAll(source =>
             source.outputAudioMixerGroup == outputGroup);
+        public int ActiveVoiceCount
+        {
+            get
+            {
+                var count = 0;
+                foreach (var source in voices)
+                    if (source.isPlaying) count++;
+                return count;
+            }
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Initialize() => EnsureInstance();

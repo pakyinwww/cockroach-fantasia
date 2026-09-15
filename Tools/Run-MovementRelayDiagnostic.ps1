@@ -16,7 +16,8 @@ param(
     [switch]$Art,
     [switch]$Audio,
     [switch]$HostAsCockroach,
-    [switch]$BriefInterruption
+    [switch]$BriefInterruption,
+    [switch]$Performance
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +42,7 @@ if ($ResultsRematch) { $common += ' -resultsRematchSmoke' }
 if ($Art) { $common += ' -artSmoke' }
 if ($Audio) { $common += ' -audioSmoke' }
 if ($BriefInterruption) { $common += ' -interruptionSmoke' }
+if ($Performance) { $common += ' -performanceSmoke' }
 $players = @(
     @{ Key = 'host'; Name = 'Human'; Seat = 'Human'; Extra = '-rosterHostSmoke -rosterStartMatch -rosterDurationSeconds 8' },
     @{ Key = 'c1'; Name = 'RoachA'; Seat = 'CockroachOne'; Extra = '-rosterJoinSmoke -rosterDurationSeconds 1' },
@@ -107,6 +109,8 @@ $results = for ($index = 0; $index -lt $players.Count; $index++) {
         Art = (Select-String -Path $logPath -Pattern 'ART_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
         Audio = (Select-String -Path $logPath -Pattern 'AUDIO_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
         Interruption = (Select-String -Path $logPath -Pattern 'INTERRUPTION_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
+        Performance = (Select-String -Path $logPath -Pattern 'PERFORMANCE_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
+        RematchMemory = (Select-String -Path $logPath -Pattern 'REMATCH_MEMORY_DIAGNOSTIC_SUCCESS' | ForEach-Object Line) -join ''
     }
 }
 
@@ -129,6 +133,11 @@ if ($processes.Where({ $_.ExitCode -ne 0 }).Count -gt 0 -or
 
 if ($BriefInterruption -and $results.Where({ [string]::IsNullOrWhiteSpace($_.Interruption) }).Count -gt 0) {
     throw "Movement diagnostic failed. Inspect $outputDirectory."
+}
+
+if ($Performance -and ($results.Where({ [string]::IsNullOrWhiteSpace($_.Performance) }).Count -gt 0 -or
+    $results.Where({ [string]::IsNullOrWhiteSpace($_.RematchMemory) }).Count -gt 0)) {
+    throw "Performance diagnostic failed. Inspect $outputDirectory."
 }
 
 if ($MatchState) {

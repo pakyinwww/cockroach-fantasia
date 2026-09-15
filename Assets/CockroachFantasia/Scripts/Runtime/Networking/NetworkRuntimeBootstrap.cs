@@ -39,6 +39,7 @@ namespace CockroachFantasia.Networking
 
             instance = this;
             DontDestroyOnLoad(gameObject);
+            Application.targetFrameRate = 60;
 
             var transport = gameObject.AddComponent<UnityTransport>();
             Manager = gameObject.AddComponent<NetworkManager>();
