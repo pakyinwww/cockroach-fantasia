@@ -39,4 +39,5 @@ local service JSON and `.env` secrets are ignored by Git.
 | Minimum/recommended rendered hardware FPS | **Pending physical release gate** |
 
 Final production sign-off remains **conditional** until the two physical gates are run by human testers.
-Do not relabel this candidate as final while either row is pending.
+Do not relabel this candidate as final while either row is pending. Follow
+`Docs/PHYSICAL_SIGNOFF.md` to capture the required evidence consistently.
