@@ -1,0 +1,15 @@
+{
+  "name": "CockroachFantasia.EditModeTests",
+  "rootNamespace": "CockroachFantasia.Tests.EditMode",
+  "references": [
+    "CockroachFantasia.Runtime",
+    "Unity.Netcode.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false
+}

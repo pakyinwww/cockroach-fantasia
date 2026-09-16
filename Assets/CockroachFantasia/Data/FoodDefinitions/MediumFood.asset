@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b025994cedf94299a226878708bb267f, type: 3}
+  m_Name: MediumFood
+  m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.Food.FoodDefinition
+  size: 1
+  displayName: Cheese Cube
+  points: 2
+  carrySpeedMultiplier: 0.85
+  networkPrefab: {fileID: 4719092727740359565, guid: a149152411d062847be4a145ee1bc4b9, type: 3}

@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b025994cedf94299a226878708bb267f, type: 3}
+  m_Name: SmallFood
+  m_EditorClassIdentifier: CockroachFantasia.Runtime::CockroachFantasia.Food.FoodDefinition
+  size: 0
+  displayName: Cracker Crumb
+  points: 1
+  carrySpeedMultiplier: 0.95
+  networkPrefab: {fileID: 1176391705543042480, guid: 7b4aac7ce35b16b438e471275a8c6692, type: 3}

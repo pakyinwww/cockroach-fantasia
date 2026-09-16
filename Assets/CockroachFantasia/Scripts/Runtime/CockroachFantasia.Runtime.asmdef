@@ -1,0 +1,16 @@
+{
+  "name": "CockroachFantasia.Runtime",
+  "rootNamespace": "CockroachFantasia",
+  "references": [
+    "Unity.InputSystem",
+    "Unity.Services.Core",
+    "Unity.Services.Authentication",
+    "Unity.Services.Multiplayer",
+    "Unity.Netcode.Runtime",
+    "Unity.Networking.Transport",
+    "Unity.Collections",
+    "Unity.ugui",
+    "Unity.Multiplayer.Tools.NetworkSimulator.Runtime"
+  ],
+  "autoReferenced": true
+}
