@@ -48,3 +48,7 @@ A successful run comments `RELAY_EXTERNAL_FOUR_RUNNER_SUCCESS` on the selected
 issue. This is external-machine Relay evidence, but it is not a substitute for
 the issue's final hands-on test across two physical Windows PCs or its manual
 playability observations.
+
+For the final physical-PC gate, use `Tools/Run-PhysicalRelayDiagnostic.ps1` and
+follow `Docs/PHYSICAL_SIGNOFF.md`. The harness produces one machine-readable
+evidence file and one player log per participant.
