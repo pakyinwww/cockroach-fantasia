@@ -1,4 +1,5 @@
 using CockroachFantasia.Gameplay;
+using CockroachFantasia.Networking;
 using CockroachFantasia.World;
 using Unity.Netcode;
 using UnityEngine;
@@ -40,6 +41,7 @@ namespace CockroachFantasia.Characters
         private bool matchPlaying;
         private bool respawning;
         private float carrySpeedMultiplier = 1f;
+        private NetworkRoleAvatar identity;
 
         public Transform CarrySocket => carrySocket;
         public bool CanAcceptInput => matchPlaying && !respawning;
@@ -62,15 +64,16 @@ namespace CockroachFantasia.Characters
         private void Awake()
         {
             controller = GetComponent<CharacterController>();
+            identity = GetComponent<NetworkRoleAvatar>();
             SetLocalPresentation(false);
         }
 
         public override void OnNetworkSpawn()
         {
-            SetLocalPresentation(IsOwner);
+            RefreshLocalPresentation();
             matchPlaying = NetworkGameManager.Instance != null && NetworkGameManager.Instance.AcceptsGameplayRequests;
             cameraYaw = transform.eulerAngles.y;
-            if (IsOwner)
+            if (IsOwner && (identity == null || !identity.IsBot))
             {
                 DisableFallbackPresentation();
                 SetLookSettings(PlayerPreferences.MouseSensitivity, PlayerPreferences.InvertY);
@@ -86,7 +89,8 @@ namespace CockroachFantasia.Characters
 
         private void Update()
         {
-            if (!IsSpawned || !IsOwner || !CanAcceptInput || PauseMenuPresenter.IsAnyOpen) return;
+            if (!IsSpawned || !IsOwner || identity != null && identity.IsBot || !CanAcceptInput ||
+                PauseMenuPresenter.IsAnyOpen) return;
 
             var move = ReadMoveInput();
             var look = Mouse.current?.delta.ReadValue() ?? Vector2.zero;
@@ -95,7 +99,8 @@ namespace CockroachFantasia.Characters
 
         private void LateUpdate()
         {
-            if (!IsSpawned || !IsOwner || ownerCamera == null || cameraPivot == null) return;
+            if (!IsSpawned || !IsOwner || identity != null && identity.IsBot || ownerCamera == null ||
+                cameraPivot == null) return;
             UpdateCameraPosition();
         }
 
@@ -146,6 +151,19 @@ namespace CockroachFantasia.Characters
             UpdateCameraRotation();
         }
 
+        public void SimulateBotMovement(Vector3 worldDirection, float deltaTime)
+        {
+            if (!CanAcceptInput || deltaTime <= 0f) return;
+            worldDirection.y = 0f;
+            worldDirection = Vector3.ClampMagnitude(worldDirection, 1f);
+            MoveAlongWorldDirection(worldDirection, EffectiveSpeed, deltaTime);
+        }
+
+        public void RefreshLocalPresentation()
+        {
+            SetLocalPresentation(IsSpawned && IsOwner && (identity == null || !identity.IsBot));
+        }
+
         public void UpdateCameraPosition()
         {
             UpdateCameraRotation();
@@ -185,6 +203,19 @@ namespace CockroachFantasia.Characters
             if (cameraPivot == null) return;
             cameraPivot.position = transform.position + Vector3.up * 0.17f;
             cameraPivot.rotation = Quaternion.Euler(cameraPitch, cameraYaw, 0f);
+        }
+
+        private void MoveAlongWorldDirection(Vector3 desiredDirection, float speed, float deltaTime)
+        {
+            var desiredVelocity = desiredDirection * speed;
+            planarVelocity = Vector3.MoveTowards(planarVelocity, desiredVelocity, acceleration * deltaTime);
+            if (desiredDirection.sqrMagnitude > 0.001f)
+            {
+                var facing = Quaternion.LookRotation(desiredDirection, Vector3.up);
+                transform.rotation = Quaternion.Slerp(transform.rotation, facing, 1f - Mathf.Exp(-turnSpeed * deltaTime));
+            }
+            verticalVelocity = controller.isGrounded ? -1f : verticalVelocity - gravity * deltaTime;
+            controller.Move((planarVelocity + Vector3.up * verticalVelocity) * deltaTime);
         }
 
         private void SetLocalPresentation(bool enabled)

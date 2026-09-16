@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using CockroachFantasia.SinglePlayer;
 
 namespace CockroachFantasia.UI
 {
@@ -19,13 +20,16 @@ namespace CockroachFantasia.UI
         [SerializeField] private Button copyButton;
         [SerializeField] private Button leaveButton;
         [SerializeField] private Button lobbyButton;
+        [SerializeField] private Button soloHumanButton;
+        [SerializeField] private Button soloCockroachButton;
         [SerializeField] private Button quitButton;
 
         private SessionCoordinator coordinator;
         private bool appliedDisplayName;
 
         public void Configure(InputField roomCode, InputField displayName, Text roomCodeText, Text status,
-            Text players, Button host, Button join, Button copy, Button leave, Button lobby, Button quit)
+            Text players, Button host, Button join, Button copy, Button leave, Button lobby, Button soloHuman,
+            Button soloCockroach, Button quit)
         {
             roomCodeInput = roomCode;
             displayNameInput = displayName;
@@ -37,6 +41,8 @@ namespace CockroachFantasia.UI
             copyButton = copy;
             leaveButton = leave;
             lobbyButton = lobby;
+            soloHumanButton = soloHuman;
+            soloCockroachButton = soloCockroach;
             quitButton = quit;
         }
 
@@ -50,11 +56,15 @@ namespace CockroachFantasia.UI
 
             coordinator.StatusChanged += OnStatusChanged;
             coordinator.SessionChanged += Refresh;
+            if (SinglePlayerCoordinator.Instance != null)
+                SinglePlayerCoordinator.Instance.StateChanged += Refresh;
             hostButton?.onClick.AddListener(Host);
             joinButton?.onClick.AddListener(Join);
             copyButton?.onClick.AddListener(coordinator.CopyRoomCode);
             leaveButton?.onClick.AddListener(Leave);
             lobbyButton?.onClick.AddListener(OpenLobby);
+            soloHumanButton?.onClick.AddListener(StartSoloHuman);
+            soloCockroachButton?.onClick.AddListener(StartSoloCockroach);
             quitButton?.onClick.AddListener(Quit);
             roomCodeInput?.onEndEdit.AddListener(NormalizeRoomCode);
             displayNameInput?.onEndEdit.AddListener(SetDisplayName);
@@ -72,12 +82,16 @@ namespace CockroachFantasia.UI
 
             coordinator.StatusChanged -= OnStatusChanged;
             coordinator.SessionChanged -= Refresh;
+            if (SinglePlayerCoordinator.Instance != null)
+                SinglePlayerCoordinator.Instance.StateChanged -= Refresh;
             hostButton?.onClick.RemoveListener(Host);
             joinButton?.onClick.RemoveListener(Join);
             copyButton?.onClick.RemoveListener(coordinator.CopyRoomCode);
             leaveButton?.onClick.RemoveListener(Leave);
             lobbyButton?.onClick.RemoveListener(OpenLobby);
             quitButton?.onClick.RemoveListener(Quit);
+            soloHumanButton?.onClick.RemoveListener(StartSoloHuman);
+            soloCockroachButton?.onClick.RemoveListener(StartSoloCockroach);
             roomCodeInput?.onEndEdit.RemoveListener(NormalizeRoomCode);
             displayNameInput?.onEndEdit.RemoveListener(SetDisplayName);
         }
@@ -141,7 +155,10 @@ namespace CockroachFantasia.UI
 
             if (statusLabel != null)
             {
-                statusLabel.text = coordinator.StatusMessage;
+                var solo = SinglePlayerCoordinator.Instance;
+                statusLabel.text = solo != null && !string.IsNullOrEmpty(solo.StatusMessage)
+                    ? solo.StatusMessage
+                    : coordinator.StatusMessage;
             }
 
             if (playerCountLabel != null)
@@ -154,6 +171,10 @@ namespace CockroachFantasia.UI
             var connected = coordinator.State == SessionConnectionState.Connected;
             if (hostButton != null) hostButton.interactable = !busy && !connected;
             if (joinButton != null) joinButton.interactable = !busy && !connected;
+            var soloBusy = SinglePlayerCoordinator.Instance != null &&
+                           SinglePlayerCoordinator.Instance.IsStarting;
+            if (soloHumanButton != null) soloHumanButton.interactable = !busy && !connected && !soloBusy;
+            if (soloCockroachButton != null) soloCockroachButton.interactable = !busy && !connected && !soloBusy;
             if (copyButton != null) copyButton.interactable = !string.IsNullOrEmpty(coordinator.RoomCode);
             if (leaveButton != null) leaveButton.interactable = connected;
             if (lobbyButton != null)
@@ -165,6 +186,15 @@ namespace CockroachFantasia.UI
                 if (label != null) label.text = lobbyButton.interactable ? "OPEN ROLE LOBBY" : "WAITING FOR HOST";
             }
             ApplyDisplayNameToRoster();
+        }
+
+        private void StartSoloHuman() => StartSolo(PlayerRole.Human);
+        private void StartSoloCockroach() => StartSolo(PlayerRole.Cockroach);
+
+        private void StartSolo(PlayerRole role)
+        {
+            SinglePlayerCoordinator.Instance?.StartGame(role);
+            Refresh();
         }
 
         private void Update()

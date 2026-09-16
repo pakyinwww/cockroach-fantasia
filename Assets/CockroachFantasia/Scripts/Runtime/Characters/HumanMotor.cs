@@ -1,4 +1,5 @@
 using CockroachFantasia.Gameplay;
+using CockroachFantasia.Networking;
 using CockroachFantasia.World;
 using Unity.Netcode;
 using UnityEngine;
@@ -34,6 +35,7 @@ namespace CockroachFantasia.Characters
         private float pitch;
         private bool matchPlaying;
         private bool respawning;
+        private NetworkRoleAvatar identity;
 
         public Camera OwnerCamera => ownerCamera;
         public Transform SwatterSocket => swatterSocket;
@@ -53,14 +55,15 @@ namespace CockroachFantasia.Characters
         private void Awake()
         {
             controller = GetComponent<CharacterController>();
+            identity = GetComponent<NetworkRoleAvatar>();
             SetLocalPresentation(false);
         }
 
         public override void OnNetworkSpawn()
         {
             matchPlaying = NetworkGameManager.Instance != null && NetworkGameManager.Instance.AcceptsGameplayRequests;
-            SetLocalPresentation(IsOwner);
-            if (IsOwner)
+            RefreshLocalPresentation();
+            if (IsOwner && (identity == null || !identity.IsBot))
             {
                 DisableFallbackPresentation();
                 SetLookSettings(PlayerPreferences.MouseSensitivity, PlayerPreferences.InvertY);
@@ -76,7 +79,8 @@ namespace CockroachFantasia.Characters
 
         private void Update()
         {
-            if (!IsSpawned || !IsOwner || !CanAcceptInput || PauseMenuPresenter.IsAnyOpen) return;
+            if (!IsSpawned || !IsOwner || identity != null && identity.IsBot || !CanAcceptInput ||
+                PauseMenuPresenter.IsAnyOpen) return;
             var move = ReadMoveInput();
             var look = Mouse.current?.delta.ReadValue() ?? Vector2.zero;
             SimulateInput(move, look, Time.deltaTime);
@@ -109,6 +113,35 @@ namespace CockroachFantasia.Characters
             planarVelocity = Vector3.MoveTowards(planarVelocity, desiredDirection * baseSpeed, acceleration * deltaTime);
             verticalVelocity = controller.isGrounded ? -1f : verticalVelocity - gravity * deltaTime;
             controller.Move((planarVelocity + Vector3.up * verticalVelocity) * deltaTime);
+        }
+
+        public void SimulateBotMovement(Vector3 worldDirection, float speedMultiplier, float deltaTime)
+        {
+            if (!CanAcceptInput || deltaTime <= 0f) return;
+            worldDirection.y = 0f;
+            worldDirection = Vector3.ClampMagnitude(worldDirection, 1f);
+            if (worldDirection.sqrMagnitude > 0.001f)
+                transform.rotation = Quaternion.Slerp(transform.rotation,
+                    Quaternion.LookRotation(worldDirection, Vector3.up), 1f - Mathf.Exp(-12f * deltaTime));
+            planarVelocity = Vector3.MoveTowards(planarVelocity,
+                worldDirection * baseSpeed * Mathf.Clamp01(speedMultiplier), acceleration * deltaTime);
+            verticalVelocity = controller.isGrounded ? -1f : verticalVelocity - gravity * deltaTime;
+            controller.Move((planarVelocity + Vector3.up * verticalVelocity) * deltaTime);
+        }
+
+        public void AimBotAt(Vector3 worldTarget)
+        {
+            if (viewPivot == null) return;
+            var direction = worldTarget - viewPivot.position;
+            var horizontal = new Vector2(direction.x, direction.z).magnitude;
+            pitch = Mathf.Clamp(Mathf.Atan2(-direction.y, Mathf.Max(0.01f, horizontal)) * Mathf.Rad2Deg,
+                minimumPitch, maximumPitch);
+            viewPivot.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        }
+
+        public void RefreshLocalPresentation()
+        {
+            SetLocalPresentation(IsSpawned && IsOwner && (identity == null || !identity.IsBot));
         }
 
         public void RecoverTo(Vector3 position)

@@ -20,7 +20,7 @@ namespace CockroachFantasia.Tests.PlayMode
             foreach (var name in new[]
                      {
                          "DisplayName", "RoomCodeInput", "CreateRoom", "JoinRoom", "CopyCode", "LeaveRoom",
-                         "Settings", "Quit", "Status", "PlayerCount"
+                         "SoloHuman", "SoloCockroach", "Settings", "Quit", "Status", "PlayerCount"
                      })
                 Assert.That(GameObject.Find(name), Is.Not.Null, name);
             var settings = GameObject.Find("FrontEndCanvas").transform.Find("SettingsPanel");
