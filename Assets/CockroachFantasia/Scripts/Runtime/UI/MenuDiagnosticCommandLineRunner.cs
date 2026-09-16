@@ -29,7 +29,7 @@ namespace CockroachFantasia.UI
                     TimeSpan.FromSeconds(30), "FrontEnd after services initialization");
                 var canvas = GameObject.Find("FrontEndCanvas");
                 var required = new[] { "DisplayName", "RoomCodeInput", "CreateRoom", "JoinRoom", "CopyCode",
-                    "LeaveRoom", "Settings", "Quit", "Status", "PlayerCount" };
+                    "LeaveRoom", "SoloHuman", "SoloCockroach", "Settings", "Quit", "Status", "PlayerCount" };
                 if (canvas == null || FindFirstObjectByType<SessionMenuPresenter>() == null ||
                     EventSystem.current == null || required.Any(name => GameObject.Find(name) == null) ||
                     canvas.transform.Find("SettingsPanel/Resolution") == null)

@@ -806,39 +806,45 @@ namespace CockroachFantasia.Editor
         {
             var existing = GameObject.Find("FrontEndCanvas");
             if (existing != null && existing.GetComponent<SessionMenuPresenter>() != null &&
-                existing.transform.Find("SettingsPanel") != null) return;
+                existing.transform.Find("SettingsPanel") != null && GameObject.Find("SoloHuman") != null) return;
             if (existing != null) UnityEngine.Object.DestroyImmediate(existing);
 
             var canvasObject = CreateOverlayCanvas(scene, "FrontEndCanvas");
             CreateText(canvasObject.transform, "Title", "COCKROACH FANTASIA", 54,
-                new Vector2(0.5f, 0.9f), new Vector2(1000f, 90f));
+                new Vector2(0.5f, 0.93f), new Vector2(1000f, 90f));
             CreateText(canvasObject.transform, "Subtitle", "One kitchen. One swatter. Three hungry pests.", 26,
-                new Vector2(0.5f, 0.83f), new Vector2(1000f, 54f));
+                new Vector2(0.5f, 0.86f), new Vector2(1000f, 54f));
             var displayName = CreateInputField(canvasObject.transform, "DisplayName", "Display name",
-                new Vector2(0.5f, 0.72f), new Vector2(520f, 62f));
+                new Vector2(0.5f, 0.77f), new Vector2(520f, 62f));
             var roomCode = CreateInputField(canvasObject.transform, "RoomCodeInput", "ROOM CODE",
-                new Vector2(0.5f, 0.62f), new Vector2(520f, 62f));
+                new Vector2(0.5f, 0.68f), new Vector2(520f, 62f));
             roomCode.characterLimit = 12;
             roomCode.contentType = InputField.ContentType.Alphanumeric;
-            var host = CreateButton(canvasObject.transform, "CreateRoom", new Vector2(0.38f, 0.5f),
+            var host = CreateButton(canvasObject.transform, "CreateRoom", new Vector2(0.38f, 0.58f),
                 new Vector2(340f, 78f), out var hostLabel);
             hostLabel.text = "CREATE ROOM";
-            var join = CreateButton(canvasObject.transform, "JoinRoom", new Vector2(0.62f, 0.5f),
+            var join = CreateButton(canvasObject.transform, "JoinRoom", new Vector2(0.62f, 0.58f),
                 new Vector2(340f, 78f), out var joinLabel);
             joinLabel.text = "JOIN ROOM";
             var codeLabel = CreateText(canvasObject.transform, "RoomCode", "Room code: —", 30,
-                new Vector2(0.42f, 0.39f), new Vector2(620f, 60f));
-            var copy = CreateButton(canvasObject.transform, "CopyCode", new Vector2(0.68f, 0.39f),
+                new Vector2(0.42f, 0.49f), new Vector2(620f, 60f));
+            var copy = CreateButton(canvasObject.transform, "CopyCode", new Vector2(0.68f, 0.49f),
                 new Vector2(220f, 60f), out var copyLabel);
             copyLabel.text = "COPY CODE";
             var players = CreateText(canvasObject.transform, "PlayerCount", "Players: 0/4", 24,
-                new Vector2(0.5f, 0.31f), new Vector2(400f, 48f));
+                new Vector2(0.5f, 0.42f), new Vector2(400f, 48f));
             var status = CreateText(canvasObject.transform, "Status", "Create a private room or enter a friend's code.", 24,
-                new Vector2(0.5f, 0.25f), new Vector2(1100f, 58f));
-            var lobby = CreateButton(canvasObject.transform, "OpenLobby", new Vector2(0.5f, 0.16f),
+                new Vector2(0.5f, 0.36f), new Vector2(1100f, 58f));
+            var lobby = CreateButton(canvasObject.transform, "OpenLobby", new Vector2(0.5f, 0.29f),
                 new Vector2(420f, 72f), out var lobbyLabel);
             lobbyLabel.text = "OPEN ROLE LOBBY";
             lobby.gameObject.SetActive(false);
+            var soloHuman = CreateButton(canvasObject.transform, "SoloHuman", new Vector2(0.38f, 0.18f),
+                new Vector2(340f, 72f), out var soloHumanLabel);
+            soloHumanLabel.text = "SOLO: HUMAN";
+            var soloCockroach = CreateButton(canvasObject.transform, "SoloCockroach", new Vector2(0.62f, 0.18f),
+                new Vector2(340f, 72f), out var soloCockroachLabel);
+            soloCockroachLabel.text = "SOLO: COCKROACH";
             var leave = CreateButton(canvasObject.transform, "LeaveRoom", new Vector2(0.36f, 0.07f),
                 new Vector2(250f, 58f), out var leaveLabel);
             leaveLabel.text = "LEAVE ROOM";
@@ -851,7 +857,7 @@ namespace CockroachFantasia.Editor
             var settingsPanel = CreateSettingsPanel(canvasObject.transform, settings, true);
             settingsPanel.SetActive(false);
             canvasObject.AddComponent<SessionMenuPresenter>().Configure(roomCode, displayName, codeLabel, status,
-                players, host, join, copy, leave, lobby, quit);
+                players, host, join, copy, leave, lobby, soloHuman, soloCockroach, quit);
             EnsureEventSystem(scene);
             EditorSceneManager.MarkSceneDirty(scene);
         }

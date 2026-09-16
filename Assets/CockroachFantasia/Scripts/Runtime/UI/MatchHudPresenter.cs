@@ -6,6 +6,7 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 using CockroachFantasia.Audio;
+using CockroachFantasia.SinglePlayer;
 
 namespace CockroachFantasia.UI
 {
@@ -236,6 +237,7 @@ namespace CockroachFantasia.UI
                                           $"FINAL FOOD  {game.DepositedPoints} / {game.Rules.FoodQuotaPoints}";
 
             var isHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+            var isSolo = SinglePlayerCoordinator.Instance != null && SinglePlayerCoordinator.Instance.IsActive;
             var canTransition = isHost && game.AllClientsAcknowledgedResults;
             if (rematchButton != null)
             {
@@ -250,18 +252,23 @@ namespace CockroachFantasia.UI
             if (waitingForHostLabel != null)
             {
                 waitingForHostLabel.gameObject.SetActive(!canTransition);
-                waitingForHostLabel.text = isHost ? "WAITING FOR EVERY PLAYER…" : "WAITING FOR HOST…";
+                waitingForHostLabel.text = isSolo ? "PREPARING RESULTS…" :
+                    isHost ? "WAITING FOR EVERY PLAYER…" : "WAITING FOR HOST…";
             }
         }
 
         private static void RequestRematch()
         {
-            NetworkRoster.Instance?.RequestRematch();
+            if (SinglePlayerCoordinator.Instance != null && SinglePlayerCoordinator.Instance.IsActive)
+                SinglePlayerCoordinator.Instance.RequestRematch();
+            else NetworkRoster.Instance?.RequestRematch();
         }
 
         private static void RequestReturnToMenu()
         {
-            NetworkRoster.Instance?.RequestReturnToMenu();
+            if (SinglePlayerCoordinator.Instance != null && SinglePlayerCoordinator.Instance.IsActive)
+                SinglePlayerCoordinator.Instance.ReturnToMenu();
+            else NetworkRoster.Instance?.RequestReturnToMenu();
         }
 
         private static bool TryResolveFood(ulong networkId, out FoodItem food)

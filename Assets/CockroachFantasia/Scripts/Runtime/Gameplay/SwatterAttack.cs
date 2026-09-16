@@ -69,16 +69,29 @@ namespace CockroachFantasia.Gameplay
             RequestSwingRpc();
         }
 
+        public bool TrySwingByServerForBot()
+        {
+            if (!IsServer || identity == null || !identity.IsBot || !motor.CanAcceptInput) return false;
+            return TryBeginServerSwing();
+        }
+
         [Rpc(SendTo.Server)]
         private void RequestSwingRpc(RpcParams rpcParams = default)
         {
+            if (rpcParams.Receive.SenderClientId == OwnerClientId) TryBeginServerSwing();
+        }
+
+        private bool TryBeginServerSwing()
+        {
             var game = NetworkGameManager.Instance;
-            if (game == null || rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (!IsServer || game == null) return false;
             var serverTime = NetworkManager.ServerTime.Time;
-            if (!SwatterAttackRules.CanStart(identity.Seat, game.Phase, serverTime, lastAcceptedServerTime)) return;
+            if (!SwatterAttackRules.CanStart(identity.Seat, game.Phase, serverTime, lastAcceptedServerTime))
+                return false;
             lastAcceptedServerTime = serverTime;
             PlaySwingRpc(transform.position);
             StartCoroutine(ResolveAfterWindup());
+            return true;
         }
 
         [Rpc(SendTo.ClientsAndHost)]

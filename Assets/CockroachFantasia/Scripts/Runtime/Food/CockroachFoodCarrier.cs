@@ -87,6 +87,16 @@ namespace CockroachFantasia.Food
             if (IsSpawned && IsOwner) RequestDropRpc();
         }
 
+        public bool TryPickupNearestByServerForBot()
+        {
+            var identity = GetComponent<NetworkRoleAvatar>();
+            if (!IsServer || identity == null || !identity.IsBot || IsCarrying) return false;
+            var target = FindBestNearbyFood();
+            if (target == null) return false;
+            TryPickupByServer(new NetworkObjectReference(target.NetworkObject), OwnerClientId);
+            return IsCarrying;
+        }
+
         public bool PreparePickupForRespawnDiagnosticsByServer(FoodItem target)
         {
             if (!IsServer || !Debug.isDebugBuild ||

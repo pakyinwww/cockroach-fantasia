@@ -2,6 +2,7 @@ using CockroachFantasia.Networking;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using CockroachFantasia.SinglePlayer;
 
 namespace CockroachFantasia.UI
 {
@@ -76,7 +77,9 @@ namespace CockroachFantasia.UI
 
         private async void ConfirmLeave()
         {
-            if (SessionCoordinator.Instance != null) await SessionCoordinator.Instance.LeaveAsync();
+            if (SinglePlayerCoordinator.Instance != null && SinglePlayerCoordinator.Instance.IsActive)
+                SinglePlayerCoordinator.Instance.ReturnToMenu();
+            else if (SessionCoordinator.Instance != null) await SessionCoordinator.Instance.LeaveAsync();
         }
     }
 }

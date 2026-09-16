@@ -20,8 +20,9 @@ namespace CockroachFantasia.UI
 
         private void Start()
         {
-            if (ServicesBootstrap.Instance != null && ServicesBootstrap.Instance.State == ServicesState.Ready)
-                LoadFrontEnd();
+            // The menu and solo mode do not depend on Unity Services. Online actions
+            // still await ServicesBootstrap when the player creates or joins a room.
+            LoadFrontEnd();
         }
 
         private void OnStatusChanged(ServicesState state, string message)
