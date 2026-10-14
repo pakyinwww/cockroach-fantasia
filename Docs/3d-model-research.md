@@ -2,6 +2,18 @@
 
 Research date: 14 October 2026.
 
+## User-selected research shortlist
+
+These four sources are the current shortlist for further research and integration
+planning. Inclusion does not mean the assets have been purchased or imported.
+
+| Source | Intended use | Research notes |
+| --- | --- | --- |
+| [Kenney Furniture Kit](https://kenney.nl/assets/furniture-kit) | Kitchen furniture and interior props. | Free, CC0; inspect the included pieces for kitchen coverage and check scale and URP materials. |
+| [Kenney Food Kit](https://kenney.nl/assets/food-kit) | Food pickups and carried food visuals. | Free, CC0; choose models that suit the game's food sizes and check their pickup and carrying presentation. |
+| [Quirky Series — Insect Vol 2, Omabuarts Studio](https://www.omabuarts.com/product/quirky-series-insect-vol-2/) | Cartoon cockroach character from the insect pack. | The pack listing includes a cockroach. Check current price, licence, supplied formats, animation clips, and URP compatibility before purchase or integration. |
+| [Mixamo](https://www.mixamo.com/) | Human character and humanoid animations. | Free with an Adobe ID; no Creative Cloud subscription required. Characters and animations may be used royalty-free in commercial games. Auto-rigging and the animation library support bipedal humanoids, so they do not directly handle a six-legged cockroach. See [Adobe's Mixamo FAQ](https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html). |
+
 ## Goal and art direction
 
 Find replacement models for Cockroach Fantasia, a cute, comedic kitchen game
